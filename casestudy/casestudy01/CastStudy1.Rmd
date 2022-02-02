@@ -15,6 +15,10 @@ knitr::opts_chunk$set(echo = TRUE)
 rm(list = ls())
 ```
 
+```{r}
+install.packages("dplyr")
+library(dplyr)
+```
 
 ```{r}
 # read bank data
