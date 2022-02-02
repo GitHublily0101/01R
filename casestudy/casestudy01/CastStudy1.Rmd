@@ -1,0 +1,152 @@
+---
+title: "Untitled"
+author: "Lily He"
+date: "1/31/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+```{r}
+#clean the environment
+rm(list = ls())
+```
+
+
+```{r}
+# read bank data
+bank <- read.csv("/Users/lilyhe/Documents/01 UTSA Spring 2022/02_DA6813/casestudy/casestudy01/bank-additional.csv", sep =';')
+```
+
+```{r}
+str(bank)
+```
+```{r}
+#check if there is na
+sum(is.na(bank))
+```
+
+
+```{r}
+#check numeric columns range, to see if data process needed.
+unique(bank$job)
+sapply(Filter(is.numeric,bank),range)
+```
+
+```{r}
+#look at the cell counts of the variables to see if the data has any issues
+sapply(Filter(is.character,bank), table)
+```
+```{r}
+#add job dummy
+#classify to unknown,student, unemployed,employed, retired.
+bank<- bank %>%
+  mutate(jobD = as.factor(case_when(job %in% c('admin.','blue-collar','entrepreneur','housemaid','management','self-employed','services','technician') ~ 'employed',
+                         job == 'unemployed'~ 'unemployed',
+                         job  == 'student' ~ 'student',
+                         job == 'retired' ~ 'retired',
+                         job == 'unknown' ~ 'unknown')))
+```
+
+
+```{r}
+#Suggestion: 1. $education, illiterate,basic.4y,basic.6y to low level, basic.9y,high.school to middle, professional.course,university.degree to high level
+
+bank<- bank %>%
+  mutate(educationD = as.factor(case_when(education %in% c('illiterate','basic.4y','basic.6y') ~ 'low',
+                              education %in% c( 'basic.9y','high.school') ~ 'middle',
+                              education %in% c( 'professional.course','university.degree') ~ 'high')))
+
+```
+
+```{r}
+levels(bank$educationD)
+#change the reference level to low
+bank$educationD = relevel(bank$educationD, ref = "low")
+levels(bank$educationD)
+```
+
+
+```{r}
+#Create dummy variables for y=yes then 1 else 0
+bank$yD = ifelse(bank$y == 'yes', 1, 0)
+```
+
+
+```{r}
+#add marital dummy
+bank<- bank %>%
+  mutate(maritalD = as.factor(case_when(marital =='unknown' ~ 0,
+                              marital == 'single' ~ 1,
+                              marital == 'married' ~2,
+                              marital == 'divorced' ~3)))
+       
+```
+
+```{r}
+names(bank)
+```
+
+```{r}
+# add loandumy
+bank$loanD = as.factor(with(bank, ifelse(loan =='no' , 0,
+                  ifelse(loan== 'unknown', -1, 1))))
+```
+
+```{r}
+levels(bank$loanD)
+```
+```{r}
+
+bank$dayofweekD = as.factor(case_when(bank$day_of_week=='mon'~ 1,
+                                bank$day_of_week=='tue'~ 2,
+                                bank$day_of_week=='wed'~ 3,
+                                bank$day_of_week=='thu'~ 4,
+                                bank$day_of_week=='fri'~ 5))
+```
+
+
+```{r}
+bank<-
+ bank %>% 
+  mutate(monthD=as.factor(case_when(month =='jan' ~ 1,
+                              month =='feb' ~ 2,
+                              month =='mar' ~ 3,
+                              month =='apr' ~ 4,
+                              month =='may' ~ 5,
+                              month =='jun' ~ 6,
+                              month =='jul' ~ 7,
+                              month =='aug'~8,
+                              month =='sep'~9,
+                              month =='oct'~10,
+                              month =='nov'~11,
+                              month =='dec' ~12)))
+```
+
+
+```{r}
+str(bank)
+```
+
+
+```{r}
+#apply glm model
+# We will use y as the dependent variable and others as predictor variables for the logistic regression model. 
+m1 = glm(yD ~ age + jobD + maritalD + educationD +  housing + loanD +contact + monthD 
+         +dayofweekD+duration +  campaign +  pdays +   previous +  poutcome +
+          emp.var.rate+cons.price.idx+cons.conf.idx+ euribor3m + nr.employed,data =bank, family = binomial)
+summary(m1)
+```
+
+```{r}
+#questions: loan dummy has NA, I couldn't find or remove the NAs
+# Should we remove unknow or treat it as a classfy
+# job classification
+# drop $default, maybe $poutcome
+str(bank$loandummy)
+
+```
+
