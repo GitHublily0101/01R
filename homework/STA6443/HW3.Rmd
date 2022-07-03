@@ -1,0 +1,154 @@
+---
+title: "HW3"
+author: "Liping He"
+date: "10/20/2021"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(MASS); library(car); library(olsrr)
+```
+
+##Exercise 1:
+#Q1
+```{r}
+setwd("/Users/lilyhe/Documents/UTSA fall 2021/STA6443/HW3")
+heart = read.csv("heart.csv", header = TRUE)
+str(heart)
+head(heart,10)
+```
+
+```{r}
+lm.heart <- lm(Cholesterol~Weight, data= heart)
+summary(lm.heart)
+```
+
+```{r}
+with(heart, plot(Weight,Cholesterol))
+abline(lm.heart, col="red")
+par(mfrow=c(2,2))
+plot(lm.heart, which=c(1:4))
+```
+
+```{r}
+cook.d = cooks.distance(lm.heart)
+plot(cook.d,col="pink", pch=19, cex=1)
+text(cooks.distance(lm.heart),labels = rownames(heart))
+```
+
+```{r}
+inf.id=which(cooks.distance(lm.heart)>0.015)
+heart[inf.id, ]
+lm.heart2=lm(Cholesterol ~ Weight, data=heart[-inf.id, ])
+```
+
+```{r}
+with(heart, plot(Weight, Cholesterol))
+abline(lm.heart, col="red")
+abline(lm.heart2,col="blue")
+legend("bottomright",col=c("red","blue"),legend=c("w/ 23&210", "w/out 23&210"), cex=0.8, title.adj=0.15, lty=1)
+```
+```{r}
+with(heart, plot(Weight,Cholesterol))
+abline(lm.heart2, col="red")
+par(mfrow=c(2,2))
+plot(lm.heart2, which=c(1:4))
+```
+
+
+
+```{r}
+summary(lm.heart)   # w/ 23&210 
+summary(lm.heart2)  # w/out 23&210
+```
+#Q2
+
+From the R output, Weight is statistically significat predictor since it's p-value smaller than significant level 0.05. From the F-statistic is slightly increased from 15.22 to 19.97 after removal of extreme values, it is greater than 0, so we say on average, Y is predicted to have an increase of 19.97 when x increases by 1 unit, so there is a relationship between our predictor variable (Weight) and response variable (Cholesterol), and the model is useful.We can formulate the model: y^ = 203.57605+ 0.12264*Weight
+
+From below aspects, we say this is not a good model for the prediction of Cholesterol levels:
+1) The R square we got is 0.006339 from the refit the model so we say roughly 0.6% of the variance found in the response variable Cholesterol can be explained by the Weight. Since it is very small,so, our model doesn't have good-of-fit of the data. 
+2) The slop is 0.006339, and from the pot, the line almost horizontal, means the slop is not strong at all for Y by x.
+3) From the polt, dots are mess and a lot scatters, they are far way from our model’s prediction line, means they are not close to the actual values, on average.
+4）There are larger numbers of residuals with extreme values.
+4) From the standardized residuals plot, some data larger than 2.
+
+
+##Exercise 2
+
+#a)
+```{r}
+lm.heart.muti <- lm(Cholesterol~ Diastolic + Systolic +Weight, data= heart)
+summary(lm.heart.muti)
+```
+
+```{r}
+cook.muti = cooks.distance(lm.heart.muti)
+#round(cook.d2, 2)
+plot(cook.muti,col="pink", pch=19, cex=1)
+text(cooks.distance(lm.heart.muti),labels = rownames(heart))
+```
+
+
+```{r}
+inf.muti=which(cooks.distance(lm.heart.muti)>0.015)
+heart[inf.muti, ]
+lm.heart.muti=lm(Cholesterol ~ Diastolic + Systolic +Weight, data=heart[-inf.muti, ])
+
+```
+
+```{r}
+summary(lm.heart.muti)
+```
+```{r}
+par(mfrow=c(2,2))
+plot(lm.heart.muti, which=1:4)  # diagnostics plot 
+
+```
+
+##b)
+We can use these coefficients to form the following estimated regression equation:
+y^ = 156.32618+0.24922*Diastolic + 0.03671*Systolic+0.02146*Weight.Y is predicted to have an increase of 156.32618 when all other predictiors are fixed.
+If we used a significant level of 0.05 to determine which predictors were significant in this regression model, we’d say that Diastolic and Systolic are statistically significant predictors while Weight is not.Since p-value is very small, we say at least one β>0, and the model is useful.
+Multiple R-squared is 0.03606, so 3.6% of the variance found in the response variable Cholesterol can be explained by the our model. Since it is very small,so, our model doesn't have good-of-fit of the data.
+
+##Exercise 3
+
+```{r}
+
+full.model <- lm(Weight ~., data = heart[-inf.muti, ])
+model.stepwise<-ols_step_both_p(full.model, pent = 0.10, prem = 0.10, details = FALSE)
+model.stepwise
+plot(model.stepwise)
+
+```
+
+```{r}
+lm.step=lm(Cholesterol ~ Diastolic + Systolic, data=heart[-inf.muti, ])
+summary(lm.step)
+```
+##a),b)
+The p-value of the model and individual variables are all smaller then significance level 0.05, so, the model is useful.We can formulate the model: y^ = 159.3317+ 0.2770*Diastolic+0.3022*Systolic
+Compare the R output of stepwise and exercise 1 and 2, the stepwise model removed predictor variable Weight since it is insignificant, while in exercise it is significant.
+The further the F-statistic is from 1 the better it is, we can see for the F-statistic stepwise(60.38) > exercise 2(40.81) > exercise 1(39.03).
+
+##Exercise 4
+```{r}
+model.best.subset<-ols_step_best_subset(full.model)
+model.best.subset
+```
+
+```{r}
+lm.Rsquare=lm(Cholesterol ~ Diastolic + Systolic +Weight, data=heart[-inf.muti, ])
+summary(lm.Rsquare)
+```
+
+```{r}
+lm.AIC=lm(Cholesterol ~ Diastolic + Systolic, data=heart[-inf.muti, ])
+summary(lm.AIC)
+```
+
+
+#a)If we select the best model based on adjusted_R square criteria, the larger the better, we select model 3. Selected predictors are:Weight,Diastolic and Systolic.
+#b)If we select the best model based on AIC criteria, the smaller the better, we select model 2. Selected predictors are:Diastolic and Systolic.
+#c) The final model in a) has 1 more predictor variable, which is Weight, but from the model, we can see it's p-value is 0.1994, which is greater than 0.05. Stepwise selection also got model 2 as final selection, so we think model 2 is better.

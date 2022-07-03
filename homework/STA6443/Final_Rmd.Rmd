@@ -1,0 +1,221 @@
+---
+title: "Final"
+author: "Liping He"
+date: "12/5/2021"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+```
+
+## R Markdown
+
+```{r}
+library(olsrr);library(DescTools); library(ResourceSelection);library(car)
+```
+
+
+```{r}
+birthweight=read.csv("birthweight_final.csv", header=TRUE)
+birthweight$Black = as.factor(birthweight$Black)
+birthweight$Married = as.factor(birthweight$Married)
+birthweight$Boy = as.factor(birthweight$Boy)
+birthweight$MomSmoke = as.factor(birthweight$MomSmoke)
+birthweight$Ed = as.factor(birthweight$Ed)
+```
+
+##Q1 
+###Q1(1)
+```{r}
+#stepwise selection
+#Black+Married+Boy+MomSmoke+Ed+MomAge+MomWtGain+Visit
+full.model <- lm(Weight ~ .-Weight_Gr, data = birthweight)
+model.stepwise<-ols_step_both_p(full.model, pent = 0.01, prem = 0.01, details = FALSE)
+model.stepwise
+#plot(model.stepwise)
+```
+
+
+```{r}
+# forward selection
+model.forward<-ols_step_forward_p(full.model, penter = 0.01, details = F) # penter: threshold p-value for enter
+model.forward    # final model summary
+#plot(model.forward)
+```
+
+
+```{r}
+# backward selection
+model.backward<-ols_step_backward_p(full.model, prem = 0.01, details = F) # prem: threshold p-value for removal
+model.backward 
+#plot(model.backward)
+```
+
+```{r}
+#best subset selection (AIC, SBC, adjusted R-squre, C(p) etc.)
+model.best.subset<-ols_step_best_subset(full.model) 
+model.best.subset
+```
+
+###Q1(2)
+```{r}
+lm.birth.muti <- lm(Weight ~ MomWtGain+MomSmoke+Black, data = birthweight)
+summary(lm.birth.muti)
+```
+```{r}
+with(birthweight, plot(birthweight,Weight))
+abline(lm.birth.muti, col="red")
+par(mfrow=c(2,2))
+plot(lm.birth.muti, which=c(1:4))
+```
+
+
+```{r}
+cook.muti = cooks.distance(lm.birth.muti)
+#round(cook.d2, 2)
+plot(cook.muti,col="pink", pch=19, cex=1)
+text(cooks.distance(lm.birth.muti),labels = rownames(birthweight))
+```
+
+```{r}
+inf.muti=which(cooks.distance(lm.birth.muti)>0.115)
+birthweight[inf.muti, ]
+```
+
+###Q1(2)
+From the diagnostics plot, there are some outliers, and there is data with Cook’s distance larger than 0.115. 
+But the majority data follow our model’s prediction line, means they are close to the actual values, on average.
+All selected predictors are significant, so we do no need refit the model.
+
+There are 3 observations in the final model,MomWtGain, MomSmoke and Black.
+
+###Q1(3)
+Multiple R-squared:  0.1271, there are 12.71% of the variation of Weight is explained by the final model.
+
+###Q1(4)
+An increase of 1 unit in MomWtGain predicts an increase of 12.006 units of Weight on average, when all other predictors are fixed. 
+On average, there is 237.799 units lower for smoke mom on baby birth weight than non somke mom when MomGain and Black are same.
+On average, there is 236.556 units lower for black mom on baby birth weight than white mom when MomGain and MomSmoke are same.
+
+
+##Q2
+
+###Q2(1)
+```{r}
+## model selection - setpwise selection
+glm.null.Gr <- glm(Weight_Gr ~ 1, data = birthweight, family = "binomial")
+glm.full.Gr <- glm(Weight_Gr ~ Black+Married+Boy+MomSmoke+Ed+MomAge+MomWtGain+Visit, data = birthweight, family = "binomial")
+
+```
+
+```{r}
+# stepwise selection with AIC
+step.models.AIC<-step(glm.null.Gr, scope = list(upper=glm.full.Gr),
+                  direction="both",test="Chisq", trace = F) 
+summary(step.models.AIC) 
+```
+
+```{r}
+# stepwise selection with BIC
+step.models.BIC<-step(glm.null.Gr, scope = list(upper=glm.full.Gr),
+                  direction="both",test="Chisq", trace = F, k=log(nrow(birthweight))) 
+
+summary(step.models.BIC)
+```
+
+###Q2(2)~(5)
+```{r}
+## goodness-of-fit check:  Hosmer Lemeshow test
+hoslem.test(step.models.BIC$y, fitted(step.models.BIC), g=10) 
+```
+
+```{r}
+#############################################
+## residual plots
+resid.d<-residuals(step.models.BIC, type = "deviance")
+resid.p<-residuals(step.models.BIC, type = "pearson")
+std.res.d<-residuals(step.models.AIC, type = "deviance")/sqrt(1 - hatvalues(step.models.BIC)) # standardized deviance residuals
+std.res.p <-residuals(step.models.BIC, type = "pearson")/sqrt(1 - hatvalues(step.models.BIC)) # standardized pearson residuals
+
+```
+
+
+```{r}
+dev.new(width = 1000, height = 1000, unit = "px")
+par(mfrow=c(1,2))
+plot(std.res.d[step.models.BIC$model$Weight_Gr==0], col = "red", 
+     ylim = c(-3.5,3.5), ylab = "std. deviance residuals", xlab = "ID")
+points(std.res.d[step.models.BIC$model$Weight_Gr==1], col = "blue")
+
+plot(std.res.p[step.models.AIC$model$Weight_Gr==0], col = "red", 
+     ylim = c(-3.5,3.5), ylab = "std. Pearson residuals", xlab = "ID")
+points(std.res.p[step.models.BIC$model$Weight_Gr==1], col = "blue")
+
+```
+
+```{r}
+## 2. Influence dianostics - cook's distance
+
+dev.new(width = 1000, height = 1000, unit = "px")
+plot(step.models.BIC, which = 4, id.n = 5)  # visual inspection
+
+# which observation has cook's d larger than 0.1?
+(inf.id=which(cooks.distance(step.models.BIC)>0.1))
+
+inf.id
+```
+
+
+```{r}
+round(exp(step.models.BIC$coefficients),3)
+```
+
+
+```{r}
+## 1. predict the probability (p) 
+fit.prob <- predict(step.models.BIC, type = "response") # estimated (fitted) probabilities of unhealthy status
+
+## 2. classification with threshold
+pred.class.1 <- ifelse(fit.prob > 0.5, 1, 0) # classification with mean threshold
+
+# output in slide - not necessary but just for the display
+sample.prop=mean(birthweight$Weight_Gr) # sample proportion
+sample.prop
+pred.class.2 <- ifelse(fit.prob > sample.prop, 1, 0) # classification with sample proportion threshold
+combined.dat = cbind(birthweight[,c("MomWtGain","MomSmoke","MomAge")], fit.prob, pred.class.1,pred.class.2)
+combined.dat[12:20,]
+head(pred.class.2, 10)
+
+## 3. calculate misclassification rate for each threshold
+mean(birthweight$Weight_Gr != pred.class.1)  # misclassification rate from 0.5 threshold
+mean(birthweight$Weight_Gr != pred.class.2)  # misclassification rate from sample proportion threshold
+```
+###Q2(2)
+There are three variables from our final mode,MomWtGain,MomSmoke,MomAge, there are all significant based on significance level 0.05. So we don't need to re-fit the model.
+Most observations standardized residuals fall between -2 and 2, so we say there is no serious issue.
+There is no residuals cook's distance greater than 0.1.
+
+###Q2(3)
+The odds of being birthweight for a mom change by factors of:
+exp(-0.036819)=0.964 with one unit increase in MomWtGain;
+exp(-0.048266) = 0.953 with one unit increase in MomAge;
+the odds of smoke mom 2.377 (=exp(0.865786)) times of a non-smoke mom 
+
+###Q2(4)
+A more weight gain, older and smoke woman has the high chance to deliver a low birthweight infant.
+
+###Q2(5)
+The sample proportion of low birthweight infant in the dataset is 0.4925.
+
+###Q2(6)
+The misclassification rate is 0.355
+
+###Q2(7)
+The goodness of fit test for the model has a p-value of 0.3252, is greater than significance level 0.05 
+it indicates the model fit is reasonable.
+
+##Q3
+Compare the results from exercise 1-2, variables MomWtGain and MomSomke are significant to birthweight.    
+Black is significant in linear regression while MomAge is significant in logical regression. 
+Low birthweight is a risk factor that can lead infant mortality, I would suggest pregnant women control their weight growth, and do not smoke during pregnancy.

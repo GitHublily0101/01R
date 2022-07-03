@@ -1,0 +1,240 @@
+---
+title: "HW_PDF_LilyHe"
+author: "Liping He"
+date: "10/1/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r cars}
+library(DescTools); library(MASS); library(car)
+
+setwd("/Users/lilyhe/Documents/UTSA fall 2021/STA6443/HW2")  # need to change this path
+
+```
+
+# Exercise 1: Analysis of Variance 
+
+```{r pressure, echo=TRUE}
+#import data
+heartbpchol <- read.csv("heartbpchol.csv")
+str(heartbpchol)
+```
+```{r}
+#change the format of "BP_Status"
+heartbpchol$BP_Status= as.factor(heartbpchol$BP_Status)
+str(heartbpchol)
+```
+
+```{r}
+#balance check
+table(heartbpchol$BP_Status)
+```
+
+```{r}
+#one-way ANOVA (Cholesterol ~ BP_Status)
+aov.heartbpchol= aov(Cholesterol ~ BP_Status, data=heartbpchol)
+summary(aov.heartbpchol)  
+```
+
+
+```{r}
+#normality check 
+#diagnostics plot - in one 
+par(mfrow=c(2,2))      
+plot(aov.heartbpchol)
+```
+```{r}
+#equal variance check
+LeveneTest(aov.heartbpchol)
+```
+
+## Exercise 1 Question a)
+Conclusion: From diagnostics plot, we can see the data is normal distributed. From the LeveneTest, p-value=0.8332, which is greater then 0.05, so we conclude the groups in BP_Status have same variance. So the equal variance assumption can be trusted. And we keep our Anova model, and the Anova p-value=0.00137, which is smaller then 0.05, so we conclude that at least one group of BP_Status has different mean of Cholesterol.
+
+```{r}
+# post-hoc test
+TukeyHSD(aov.heartbpchol)
+```
+## Exercise 1 Question b)
+Based on post_hoc test, the p-value of pair Normal-High and Optimal-High are smaller than 0.05, that means these pairs are significantly different. Specifically, Group High is significantly different from every other group. Our conclusion is group High has highest mean value of Cholesterol.
+
+# Exercise 2: Analysis of Variance
+```{r}
+#import data
+bupa <- read.csv("bupa.csv")
+str(bupa)
+```
+```{r}
+#change the format of "drinkgroup"
+bupa$drinkgroup= as.factor(bupa$drinkgroup)
+str(bupa)
+```
+
+
+```{r}
+#balance check
+table(bupa$drinkgroup)
+```
+```{r}
+#one-way ANOVA (mcv ~ drinkgroup)
+aov.bupa= aov(mcv ~ drinkgroup, data=bupa)
+summary(aov.bupa)  
+```
+
+```{r}
+#nomality check
+par(mfrow=c(2,2))      
+plot(aov.bupa)
+#equal variance check
+LeveneTest(aov.bupa)
+```
+
+## Exercise 2 Question a)
+P-value from ANOVA for mcv is smaller than 0.05, so we conclude at least one of the drinkgroup means is significantly different from the others in mcv.
+P-value= 0.8744,from LeveneTest, which is greater than 0.05. That means the groups in drinkgroup have same variance,so, the equal variance assumption can be trusted.
+
+
+```{r}
+#one-way ANOVA (alkphos ~ drinkgroup)
+bupa$alkphos = as.integer(bupa$alkphos)
+aov.bupa2= aov(alkphos ~ drinkgroup, data=bupa)
+summary(aov.bupa2)  
+```
+
+```{r}
+#equal variance check
+LeveneTest(aov.bupa2)
+```
+## Exercise 2 Question b)
+P-value from ANOVA for alkphos is smaller than 0.05, so we conclude at least one drinkgroup means is significantly different from others in alkphos.
+P-value= 0.6539,from LeveneTest, which is greater than 0.05. That means the groups in drinkgroup have same variance, so, the equal variance assumption can be trusted.
+
+
+```{r}
+# post-hoc test
+TukeyHSD(aov.bupa)
+```
+
+```{r}
+# post-hoc test
+TukeyHSD(aov.bupa2)
+```
+## Exercise 2 Question c):
+From the results of post_hoc tests:
+ANOVA for "mcv ~ drinkgroup",the p-value of pair 4-1,4-2,4-3,5-1 are smaller than 0.05, which means between each pair, there is significantly difference between those pairs. Specifically, group 4 has different effect on mcv than group 1,2,3, group 5 has different on mac than group 1
+ANOVA for "alkphos ~ drinkgroup", the p-value of pair 5-1,5-2,5-3,5-4 are smaller than 0.05, which means each pair has significant difference. Specifically, group 5 is significantly different from every other groups, group 5 has different effect on alkphos.
+Other similarity is, if lwr is negative, then corresponding p-value will be greater than 0.05, vice versa. 
+
+# Exercise 3:
+
+```{r}
+#import data
+psych <- read.csv('psych.csv')
+str(psych)
+```
+
+```{r}
+#balance check
+table(psych$sex);table(psych$rank)
+```
+```{r}
+# include interaction and check its significance
+# unbalanced case
+# typ1 and type 3
+aov.psych1= aov(salary ~ sex + rank + sex * rank , data = psych)
+summary(aov.psych1)
+
+Anova(aov.psych1, type=3)
+```
+
+## Exercise 3 Question a)
+Compare their p-value, type 1, the p-value of sex and rank variables both smaller than 0.05, so we conclude at least one of the group means of sex is significant different from others in salary, and at least one of the group means of rank is significant different from others in salary.
+type 3, only p-value of rank variable smaller than 0.05, so,at least one of the group means of rank is significant different from others in salary.
+The p-value of the interaction between sex and rank in type 1 and type 3 are same, is greater than 0.05, so we say there is no interaction effect between group sex and rank.
+The sums of square of sex and rank in type 1 are greater then type 3, because type 1 use sequential sum of squares, while type 3 use partial sums of squares. The sums of square of sex reduce largely compare the rank from type 1 to type 3, that means order matters in type 1.
+
+
+```{r}
+# unbalanced case without interaction
+#aov.psych3 = aov(salary ~ sex + rank, data=psych) # type 1
+#summary(aov.psych3) 
+aov.psych4 = aov(salary ~ rank + sex, data=psych)# type 1
+summary(aov.psych4) 
+Anova(aov.psych4, type =3) #type 3
+```
+## Exercise 3 Question b)
+After removal of the interaction, both in type 1 and type 3, the p-value of sex and rank group are smaller than 0.05. So we conclude that both group sex and rank have significant effect on salary.
+
+```{r}
+#nomality check
+#variance check
+par(mfrow=c(2,2))
+plot(aov.psych4)
+```
+## Exercise 3 Question c)
+Normality assumption is good based on above Q-Q plot.
+
+```{r}
+# post-hoc test
+TukeyHSD(aov.psych1)
+```
+## Exercise 3 Question d)
+From above post-hoc test, the p value of group sex is smaller than 0.05, and the difference from M-F is positive, so we say the male mean salary is significant different from female, which means male salary > famle salary.
+From the p-value of rank, it smaller then 0.05, and the diff is positive, so we say the Assoc mean salary is significant different from Assist, which means Assoc salary > Assist salary.
+From the p-value of interactive, pair M:Assoc-F:Assist and M:Assoc-M:Assist are smaller than 0.05, we say these pair have significant different mean. Specifically, M:Assoc > F:Assist, M:Assoc > M:Assist.
+
+# Exercise 4:
+```{r}
+#import data
+car_new <- read.csv("cars_new.csv")
+str(car_new)
+```
+```{r}
+#change format of cylinders
+car_new$cylinders = as.factor(car_new$cylinders)
+str(car_new)
+```
+```{r}
+#balance check
+table(car_new$cylinders); table(car_new$origin); table(car_new$type)
+```
+
+```{r}
+#unbalanced 3 way anova 
+# Backward elimination example (manually)
+# 1. find the least significant variable (with largest p-value) to remove
+#summary(aov(mpg_highway ~ cylinders + origin + type, data=car_new))
+aov.car_new = aov(mpg_highway ~ cylinders + origin + type, data=car_new)
+Anova(aov.car_new, type=3)
+```
+
+```{r}
+# 2. remove the next insignificant variable
+#summary(aov(mpg_highway ~ cylinders + type, data=car_new))
+aov.car_new2 = aov(mpg_highway ~ cylinders + type, data=car_new)
+Anova(aov.car_new2, type=3)
+```
+
+## Exercise 4 Question a)
+There is no more insignificant variable to remove after we removed group origin. So we keep cylinders and group type in the model for mpg_highway. Now the p-value of cylinders and type are smaller than 0.05, we say group cylinders and type have significent effect in highway fuel efficiency.
+
+```{r}
+#adding interaction
+aov.car_new3 = aov(mpg_highway ~ cylinders * type, data=car_new)
+Anova(aov.car_new3, type=3)
+```
+## Exercise 4 Question b)
+From above final model, we see p-value for cylinders, type and their interaction are all smaller than 0.05, so we say both the groups and their interaction significantly effected the efficiency in highway fuel efficiency.
+
+```{r}
+# post-hoc test
+TukeyHSD(aov.car_new3)
+```
+## Exercise 4 Question c)
+From above post-hoc test, the p-value of pair 6:Sedan-4:Sedan,4:Sports-4:Sedan,6:Sports-4:Sedan are smaller then 0.05, so we think these pairs have significant different mean to mpg_highway. Specifically, 4:Sedan has the largest mpg mean, so we say, 4 cylinders Sedan is the most efficient pair in highway fuel efficiency.
+

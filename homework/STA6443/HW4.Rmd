@@ -1,0 +1,369 @@
+---
+title: "HW4"
+author: "Liping He"
+date: "12/1/2021"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+```
+
+## R Markdown
+
+```{r}
+library(DescTools); library(ResourceSelection)
+```
+
+
+```{r}
+liver=read.csv("liver.csv", header=TRUE)
+str(liver)
+```
+```{r}
+liver[which(liver$Age <18),]
+```
+
+
+###Q1
+```{r}
+liverF = liver[which(liver$Gender=='Female'),]
+```
+
+## model selection - setpwise selection
+```{r}
+glm.null.F <- glm(LiverPatient ~ 1, data = liverF, family = "binomial")
+glm.full.F <- glm(LiverPatient ~ Age+TB+DB+Alkphos+Alamine+Aspartate+TP+ALB, data = liverF, family = "binomial")
+
+```
+
+
+# stepwise selection with AIC
+
+```{r}
+step.models.AIC<-step(glm.null.F, scope = list(upper=glm.full.F),
+                  direction="both",test="Chisq", trace = F) 
+summary(step.models.AIC) 
+```
+
+```{r}
+## goodness-of-fit check:  Hosmer Lemeshow test
+hoslem.test(step.models.AIC$y, fitted(step.models.AIC), g=10)  # function in package "ResourceSelection"
+
+```
+
+```{r}
+#############################################
+## residual plots
+resid.d<-residuals(step.models.AIC, type = "deviance")
+resid.p<-residuals(step.models.AIC, type = "pearson")
+std.res.d<-residuals(step.models.AIC, type = "deviance")/sqrt(1 - hatvalues(step.models.AIC)) # standardized deviance residuals
+std.res.p <-residuals(step.models.AIC, type = "pearson")/sqrt(1 - hatvalues(step.models.AIC)) # standardized pearson residuals
+
+```
+
+```{r}
+dev.new(width = 1000, height = 1000, unit = "px")
+par(mfrow=c(1,2))
+plot(std.res.d[step.models.AIC$model$LiverPatient==0], col = "red", 
+     ylim = c(-3.5,3.5), ylab = "std. deviance residuals", xlab = "ID")
+points(std.res.d[step.models.AIC$model$LiverPatient==1], col = "blue")
+
+plot(std.res.p[step.models.AIC$model$LiverPatient==0], col = "red", 
+     ylim = c(-3.5,3.5), ylab = "std. Pearson residuals", xlab = "ID")
+points(std.res.p[step.models.AIC$model$LiverPatient==1], col = "blue")
+
+```
+
+```{r}
+## 2. Influence dianostics - cook's distance
+
+dev.new(width = 1000, height = 1000, unit = "px")
+plot(step.models.AIC, which = 4, id.n = 5)  # visual inspection
+
+# which observation has cook's d larger than 0.25?
+(inf.id=which(cooks.distance(step.models.AIC)>0.25))
+
+inf.id
+```
+
+
+```{r}
+round(exp(step.models.AIC$coefficients),3)
+```
+```{r}
+sample.prop=mean(liverF$LiverPatient) # sample proportion of unhealthy status
+sample.prop
+```
+
+
+```{r}
+## 1. predict the probability (p) 
+fit.prob <- predict(step.models.AIC, type = "response") # estimated (fitted) probabilities of unhealthy status
+
+## 2. classification with threshold
+pred.class.1 <- ifelse(fit.prob > 0.5, 1, 0) # classification with mean threshold
+
+# output in slide - not necessary but just for the display
+sample.prop=mean(liverF$LiverPatient) # sample proportion
+pred.class.2 <- ifelse(fit.prob > sample.prop, 1, 0) # classification with sample proportion threshold
+combined.dat = cbind(liverF[,c("DB","Aspartate")], fit.prob, pred.class.1,pred.class.2)
+combined.dat[12:20,]
+head(pred.class.2, 10)
+
+## 3. calculate misclassification rate for each threshold
+mean(liverF$LiverPatient != pred.class.1)  # misclassification rate from 0.5 threshold
+mean(liverF$LiverPatient != pred.class.2)  # misclassification rate from sample proportion threshold
+```
+#Q1 interpretation:
+
+There are two variables from our final mode, DB and Aspartate. 
+We got our final modal: LiverPatient ~ DB + Aspartate. 
+The P value for DB is 0.0905, and P value for Aspartate is 0.0726, the two selected variables are all significant based on our significance level alpha=0.1. 
+
+Most observations standardized residuals fall between -2 and 2, so we say there is no serious issue.
+There is no residuals cook's distance greater than 0.25.
+
+The odds of being liver pationt for a female change by factors of 
+exp(0.94479)=2.572 with one unit increase in DB, and exp(0.01106) = 1.011 with one unit increase in Aspartate.
+The odds for the two variables are all greater than 1. Thus, a female has high DB and high Aspartate level has the highest chance to be a liver patient.
+
+By the goodness-of-fit check, p-value = 0.4579, we say the model fit is adequate
+
+For the predicted data, pred.class.1 is based on cut-off 0.5, pred.class.2 based on the sample mean. 1 in the two preds means an adult female to have a chance of be liver patient, 0 means no such chance.
+
+
+#Q2
+```{r}
+liverM = liver[which(liver$Gender == 'Male'),]
+```
+
+
+```{r}
+## model selection - stepwise selection
+glm.null.M <- glm(LiverPatient ~ 1, data = liverM, family = "binomial")
+glm.full.M <- glm(LiverPatient ~ Age+TB+DB+Alkphos+Alamine+Aspartate+TP+ALB, data = liverM, family = "binomial")
+
+(step.model.1<-step(glm.null.M, scope = list(upper=glm.full.M),
+                      direction="both",test="Chisq", trace = F)) 
+
+summary(step.model.1)
+```
+
+```{r}
+## goodness-of-fit check: Hosmer Lemshow test
+hoslem.test(step.model.1$y, fitted(step.model.1), g=10)
+
+```
+
+```{r}
+## residual polts
+resid.dm <- residuals(step.model.1, type = "deviance")
+resid.pm <- residuals(step.model.1, type = "pearson")
+std.res.dm <- residuals(step.model.1, type ="deviance") / sqrt(1-hatvalues(step.model.1))
+std.res.pm <- residuals(step.model.1, type = "pearson") / sqrt(1-hatvalues(step.model.1))
+```
+
+```{r}
+dev.new(width = 1000, height = 1000, unit = "px")
+par(mfrow=c(1,2))
+plot(std.res.dm[step.model.1$model$LiverPatient==0], col = "red",
+     ylim = c(-3.5, 3.5), ylab = "std. deviance residuals", xlab = "ID")
+points(std.res.dm[step.model.1$model$LiverPatient == 1], col = "blue")
+
+plot(std.res.pm[step.model.1$model$LiverPatient ==0], col ="red",
+     ylim =c(-3.5, 3.5), ylab = "std.deviance residuals", xlab ="ID")
+points(std.res.pm[step.model.1$model$LiverPatient == 1], col="blue")
+```
+```{r}
+##  Influence dianostics - cook's distance
+
+dev.new(width = 1000, height = 1000, unit = "px")
+plot(step.model.1, which = 4, id.n = 5)  # visual inspection
+
+# which observation has cook's d larger than 0.25?
+(inf.id=which(cooks.distance(step.model.1)>0.25))
+
+inf.id
+```
+
+
+```{r}
+liverF.OR =exp(step.model.1$coefficients)
+round(liverF.OR, 3)
+```
+
+```{r}
+## 1. predict the probability (p) of unhealthy status
+
+fit.prob <- predict(step.model.1, type = "response") # estimated (fitted) probabilities of unhealthy status
+
+## 2. classification with threshold
+
+pred.class.1 <- ifelse(fit.prob > 0.5, 1, 0) # classification with 0.5 threshold
+
+sample.prop=mean(liverM$LiverPatient) # sample proportion of unhealthy status
+pred.class.2 <- ifelse(fit.prob > sample.prop, 1, 0) # classification with sample proportion threshold
+
+
+# output in slide - not necessary but just for the display
+combined.dat = cbind(liverM[,c("DB","Alamine", "Age", "Alkphos","LiverPatient")], fit.prob, pred.class.1, pred.class.2)
+combined.dat[12:20,]
+
+## 3. calculate misclassification rate for each threshold
+mean(liverM$LiverPatient != pred.class.1)  # misclassification rate from 0.5 threshold
+mean(liverM$LiverPatient != pred.class.2)  # misclassification rate from sample proportion threshold
+```
+
+#Q2 interpretation:
+
+There are four variables from our final mode, "DB","Alamine", "Age", "Alkphos". We got our final modal: LiverPatient ~ DB + Alamine + Age + Alkphos. 
+The P value of the selected 4 variables are all significant based on our significance level alpha=0.1. 
+
+Most observations standardized residuals fall between -2 and 2, there are several outliers, but there is no serious issue for the residuals.
+
+The odds of being liver pationt for a female change by factors of exp(0.512503)=1.669 with one unit increase in DB, exp(0.0162186) = 1.016 with one unit increase in Alamine, exp(0.020616) = 1.021 with one unit increase in Age and exp(0.001740) = 1.002 with one unit increase in Alkphos. The odds ratio for the selected variables are all greater than 1. Thus, a male with high DB, high Alamine, high Age and high Alkphos level has the highest chance to be a liver patient.
+
+By the goodness-of-fit check, p-value = 0.532, we say the model fit is adequate.
+
+For the predicted data, pred.class.1 is based on cut-off 0.5, pred.class.2 based on the sample mean. 1 in the two preds means a chance for an adult male be a liver patient, 0 means no such chance.
+
+The difference between adult male and adult female to have a chance of being a liver patient are:
+1)There are more factors affect male, DB, Alamine, Age and Alkpho, while female only two: DB and Aspartate. 
+2)DB affect female(2.572) more serious than male(1.669).
+3)The misclassification rate for male is greater than female due to more variables and ourliers
+
+
+#Q3
+```{r}
+sleep=read.csv("sleep.csv", header=TRUE)
+str(sleep)
+
+glm.null.sleep1 <- glm(maxlife10 ~ 1, data = sleep, family = "binomial")
+glm.full.sleep1 <- glm(maxlife10 ~ bodyweight+brainweight+totalsleep+gestationtime
+                       +as.factor(predationindex)+as.factor(sleepexposureindex), data = sleep, family = "binomial")
+
+step.sleep1 <- step(glm.null.sleep1, scope = list(upper=glm.full.sleep1),
+     direction="both",test="Chisq", trace = F)
+
+summary(step.sleep1)
+```
+
+```{r}
+## goodness-of-fit check: Hosmer Lemshow test
+hoslem.test(step.sleep1$y, fitted(step.sleep1), g=10)
+
+```
+
+```{r}
+## residual polts
+resid.ds <- residuals(step.sleep1, type = "deviance")
+resid.ps <- residuals(step.sleep1, type = "pearson")
+std.res.ds <- residuals(step.sleep1, type ="deviance") / sqrt(1-hatvalues(step.sleep1))
+std.res.ps <- residuals(step.sleep1, type = "pearson") / sqrt(1-hatvalues(step.sleep1))
+```
+
+```{r}
+dev.new(width = 1000, height = 1000, unit = "px")
+par(mfrow=c(1,2))
+plot(std.res.ds[step.sleep1$model$maxlife10==0], col = "red",
+     ylim = c(-3.5, 3.5), ylab = "std. deviance residuals", xlab = "ID")
+points(std.res.ds[step.sleep1$model$maxlife10 == 1], col = "blue")
+
+plot(std.res.ps[step.sleep1$model$maxlife10 ==0], col ="red",
+     ylim =c(-3.5, 3.5), ylab = "std.deviance residuals", xlab ="ID")
+points(std.res.ps[step.sleep1$model$maxlife10 == 1], col="blue")
+```
+```{r}
+##  Influence dianostics - cook's distance
+
+dev.new(width = 1000, height = 1000, unit = "px")
+plot(step.sleep1, which = 4, id.n = 5)  # visual inspection
+
+```
+```{r}
+liverF.OR =exp(step.sleep1$coefficients)
+round(liverF.OR, 3)
+```
+#Q3 interpretation:
+There are four variables in our final mode, brainweight, totalsleep, as.factor(sleepexposureindex), as.factor(predationindex). 
+
+We got our final modal: maxlife10 ~brainweight + totalsleep + as.factor(sleepexposureindex) + as.factor(predationindex). 
+
+The P value of brainweight,  sleepexposureindex(2,3,4,5), and predationindex(2,3,4,5) are significant based on our significance level alpha=0.1. 
+
+By the goodness-of-fit check, p-value = 0.5324, we say the model fit is adequate.
+
+Most observations standardized residuals fall between -2 and 2, there are several outliers, but there is no serious issue for the residuals.
+
+All the selected variables’ odds ratio are less than one, so for the continus variables brainweight and totalsleep, with one unit of increase in x, odds will decrease. For categorical variables sleepexposureindex and predationindex, the odds ration for index 2 or 3 or 4 or 5 are less than 1, means index 1 has higher chance to have an event.
+So, we say the low value of brainweight and low totalsleep, and index 1 for sleepexposureindex and index 1 for predationindex has the highest chance for a species' maximum lifespan being at least 10 years
+
+##Q4
+```{r}
+sleep=read.csv("sleep.csv", header=TRUE)
+str(sleep)
+glm.null.sleep2 <- glm(maxlife10 ~ 1, data = sleep, family = "binomial")
+
+glm.full.sleep2 <- glm(maxlife10 ~ bodyweight+brainweight+totalsleep+gestationtime
+                       + predationindex + sleepexposureindex, data = sleep, family = "binomial")
+
+step.sleep2 <- step(glm.null.sleep2, scope = list(upper=glm.full.sleep2),
+                    direction="both",test="Chisq", trace = F)
+
+summary(step.sleep2)
+
+```
+
+```{r}
+## goodness-of-fit check: Hosmer Lemshow test
+hoslem.test(step.sleep2$y, fitted(step.sleep2), g=10)
+
+```
+
+```{r}
+## residual polts
+resid.ds <- residuals(step.sleep2, type = "deviance")
+resid.ps <- residuals(step.sleep2, type = "pearson")
+std.res.ds <- residuals(step.sleep2, type ="deviance") / sqrt(1-hatvalues(step.sleep2))
+std.res.ps <- residuals(step.sleep2, type = "pearson") / sqrt(1-hatvalues(step.sleep2))
+```
+
+```{r}
+dev.new(width = 1000, height = 1000, unit = "px")
+par(mfrow=c(1,2))
+plot(std.res.ds[step.sleep2$model$maxlife10==0], col = "red",
+     ylim = c(-3.5, 3.5), ylab = "std. deviance residuals", xlab = "ID")
+points(std.res.ds[step.sleep2$model$maxlife10 == 1], col = "blue")
+
+plot(std.res.ps[step.sleep2$model$maxlife10 ==0], col ="red",
+     ylim =c(-3.5, 3.5), ylab = "std.deviance residuals", xlab ="ID")
+points(std.res.ps[step.sleep2$model$maxlife10 == 1], col="blue")
+```
+
+```{r}
+liverF.OR =exp(step.sleep2$coefficients)
+round(liverF.OR, 3)
+```
+```{r}
+##  Influence dianostics - cook's distance
+
+dev.new(width = 1000, height = 1000, unit = "px")
+plot(step.sleep2, which = 4, id.n = 5)  # visual inspection
+
+```
+
+
+#Q4 interpretation:
+There are four variables in our final mode, brainweight, totalsleep, sleepexposureindex and predationindex. 
+
+We got our final modal: maxlife10 ~ brainweight + totalsleep + sleepexposureindex + predationindex. 
+
+The P value for the all 4 variables are all significant based on our significance level alpha=0.1. 
+
+By the goodness-of-fit check, p-value = 0.9937, we say the model fit is adequate.
+
+Most observations standardized residuals fall between -2 and 2, there are several outliers, but there is no serious issue for the residuals.
+
+The odds of have a chance for a species' maximum lifespan being at least 10 years change by factors of exp(0.06018) = 1.062 with one unit increase in brainweight, exp(0.35985)=1.433 with one unit increase in totalsleep, exp(4.42111) = 83.188 with one unit increase in sleepexposureindex, and exp(-3.36917) = 0.034(decrease) with one unit increase in predationindex.Thus, with high brainweight, high totalsleep, high sleepexposureindex level and low predationindex level, a species' maximum lifespan will has the highest chance for being at least 10 years.
+
