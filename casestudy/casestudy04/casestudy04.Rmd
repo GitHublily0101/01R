@@ -1,0 +1,332 @@
+---
+title: "casestudy04"
+author: "Lily He"
+date: "4/3/2022"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Install packages
+
+```{r}
+install.packages(c("SMCRM","dplyr","tidyr","ggplot2","survival","rpart","rattle","randomForestSRC","purrr"))
+```
+
+
+Load Packages
+
+```{r, message=FALSE, warning=FALSE}
+library(SMCRM) # CRM data
+library(dplyr) # data wrangling
+library(tidyr) # data wrangling
+library(ggplot2) # plotting
+library(survival) # survival
+library(rpart) # DT
+library(randomForestSRC) # RF
+library(caret)
+library(tree)
+```
+
+
+Dataset
+
+```{r}
+data("acquisitionRetention")
+aR <- acquisitionRetention 
+```
+
+```{r}
+aR$customer <- NULL
+aR$acquisition<- as.factor(aR$acquisition)
+aR$industry<- as.factor(aR$industry)
+```
+
+```{r}
+str(aR)
+```
+
+```{r}
+summary(is.na(aR))
+```
+
+```{r}
+set.seed(1)
+Train <- createDataPartition(y = aR$acquisition, p=0.7, list=FALSE)
+aR.train <- aR[Train, ]
+aR.test <- aR[-Train, ]
+```
+
+
+```{r}
+# Run a decision tree model
+
+dt.model1 <- rpart(acquisition ~ acq_exp+industry+revenue+employees,
+                             data = aR.train) # simple DT model
+
+rattle::fancyRpartPlot(dt.model1, sub = "") # vizualize the DT
+```
+
+
+```{r}
+dt.model1.preds <- predict(dt.model1, aR.test,type="class")
+dt.confusion <- table(aR.test$acquisition,dt.model1.preds)
+dt.confusion
+```
+```{r}
+dt.accuracy <- sum(diag(dt.confusion))/sum(dt.confusion)
+dt.accuracy
+```
+* * Decision Tree gave 78.79% accuracy for customer acquisition
+
+```{r}
+# perform pruning
+# Perform cost complexity pruning by cross-validation (CV), using misclassification rate
+# Note: k = alpha (pruning), dev = cross-validation error rate, size = size of tree -->
+set.seed(123)
+dt.prune <- tree(acquisition ~ acq_exp + industry + revenue + employees, data = aR.train)
+cv.aR = cv.tree(dt.prune,FUN = prune.misclass)
+cv.aR
+```
+```{r}
+# Plot the estimated test error rate, note that when k is small, size is large, and vice versa. 
+par(mfrow = c(1,2))
+plot(cv.aR$size, cv.aR$dev, type = "b")
+plot(cv.aR$k, cv.aR$dev, type = "b")
+```
+
+```{r}
+# Get the best size 
+best_size = cv.aR$size[which.min(cv.aR$dev)]
+best_size
+```
+
+```{r}
+# Plot the pruned tree. Nine leaves. 
+prune.aR = prune.misclass(dt.prune, best = best_size)
+plot(prune.aR)
+text(prune.aR, cex =0.7)
+
+```
+```{r}
+?rpart.control
+```
+
+
+```{r}
+#Get the pruned tree of the best size 
+prune.aR = rpart(prune.misclass(dt.prune, best = best_size))
+rattle::fancyRpartPlot(prune.aR, sub = "") # vizualize the DT
+```
+```{r}
+# Get predictions on the test set
+pred_pruned = predict(prune.aR, newdata = aR.test, type = "class")
+
+# Get the confusion matrix  
+dt.prune.confusion <- table(pred_pruned, aR.test$acquisition)
+dt.prune.confusion
+```
+```{r}
+dt.prune.accuracy <- sum(diag(dt.prun.confusion))/sum(dt.prun.confusion)
+dt.prune.accuracy
+```
+
+
+```{r}
+# Compute the missclassification rate of a larger pruned tree for size 15.
+prune2.aR = prune.misclass(dt.prune,20)
+pred_pruned2 = predict(prune2.aR, newdata = aR.test, type = "class")
+dt.prune2.confusion <- table(pred_pruned2, aR.test$acquisition)
+dt.prune2.confusion
+```
+
+```{r}
+dt.prune2.accuracy <- sum(diag(dt.prune2.confusion))/sum(dt.prune2.confusion)
+dt.prune2.accuracy
+```
+
+
+
+
+=====================================
+
+Split data set to train(70%), test(30%)
+```{r}
+set.seed(1)
+ind=sample(2,nrow(aR),replace = T,prob = c(0.7,0.3))
+aR.train<-aR[ind==1,]
+aR.test<-aR[ind==2,]
+```
+
+Use rpart generate a classification tree model
+```{r}
+aR.rp<-rpart(acquisition ~ acq_exp + industry + revenue + employees, data = aR.train)
+printcp(aR.rp)
+```
+Get a graphical representation to the cross validated error summary.
+```{r}
+plotcp(aR.rp)
+```
+Visualization the tree model
+```{r}
+rattle::fancyRpartPlot(aR.rp, sub = "") 
+```
+Predict on the tree and calculate it's accuracy
+```{r}
+predictions<-predict(aR.rp,aR.test,type = "class")
+table(aR.test$acquisition,predictions)
+confusionMatrix(table(predictions,aR.test$acquisition))
+```
+* This decision tree model gave an accuracy of 79.31%
+
+*Prune the tree*  
+* find the minest xerror
+```{r}
+min(aR.rp$cptable[,"xerror"])
+```
+```{r}
+which.min(aR.rp$cptable[,"xerror"])
+```
+3、获取交叉检验最小记录的成本复杂度参数值：
+```{r}
+aR.cp<-aR.rp$cptable[4,"CP"]
+aR.cp
+```
+
+4、设置参数cp的值与交叉检验误差最小记录的cp值相同以进行剪枝
+```{r}
+prune.tree<-prune(aR.rp,cp=aR.cp)
+```
+
+5、绘制分类树
+
+```{r}
+rattle::fancyRpartPlot(prune.tree, sub = "")
+```
+
+六、评测递归分割树的预测能力
+1、执行一下操作完成对分类树的预测性能验证：
+调用predict函数生成测试数据集的类标号预测表
+
+```{r}
+predictions<-predict(prune.tree,aR.test,type = "class")
+```
+
+2、调用table函数建立测试数据集的分类表
+```{r}
+table(aR.test$acquisition,predictions)
+```
+3、调用caret包提供的onfusionMatrix函数生成混淆矩阵
+```{r}
+confusionMatrix(table(predictions,aR.test$acquisition))
+```
+
+
+
+==========================
+
+```{r}
+library(rpart)
+library(caret)
+
+# read data into aR
+data("acquisitionRetention")
+aR <- acquisitionRetention 
+# set variables type accordingly
+aR$customer <- NULL
+aR$acquisition<- as.factor(aR$acquisition)
+aR$industry<- as.factor(aR$industry)
+
+## Create training and test data
+# figure out 70% sample size
+smp_size <- floor(0.7 * nrow(aR))
+
+# partition data into train and test
+set.seed(123)
+train_ind <- sample(seq_len(nrow(aR)), size = smp_size)
+train <- aR[train_ind, ]
+test <- aR[-train_ind, ]
+
+## Fit Decision Tree
+# grow tree out completely
+# dt.fit <-rpart(acquisition ~ acq_exp+industry+revenue+employees,                         
+#             data = train,                   
+#             method = "class",                     
+#             parms = list(split = 'information'),
+#             maxsurrogate = 0,                     
+#             cp = 0,                              
+#             minsplit = 5,                                                             
+#             minbucket = 2,
+#             xval = 10)
+
+dt.fit<-rpart(acquisition ~ acq_exp + industry + revenue + employees, data = train)
+
+# plot tree
+rattle::fancyRpartPlot(dt.fit, sub = "Decision Tree to Predict Customer Acquisition") 
+```
+
+```{r}
+# display the results
+printcp(dt.fit)
+
+# detailied summany of splits
+summary(dt.fit)
+
+# visualize cross validation results
+plotcp(dt.fit)
+```
+
+```{r}
+# Get predictions on the test set
+dt.pred = predict(dt.fit, newdata = test, type = "class")
+
+# Get the confusion matrix  
+dt.pred.confusion <- table(dt.pred, test$acquisition)
+dt.pred.confusion
+
+# Get the accuracy of the tree model
+dt.pred.accuracy <- sum(diag(dt.pred.confusion))/sum(dt.pred.confusion)
+dt.pred.accuracy
+```
+
+
+```{r}
+# determine where to cut the tree
+dt.fit$cptable[which.min(dt.fit$cptable[,"xerror"]),"CP"]
+
+# prune the tree to prevent overfitting
+dt.pfit<- prune(dt.fit, cp = dt.fit$cptable[which.min(dt.fit$cptable[,"xerror"]),"CP"])
+
+
+# show results of pruned tree
+summary(dt.pfit)
+
+# plot pruned results
+plot(dt.pfit, uniform=TRUE, main="Pruned Decision Tree to Predict If Car Sold")
+text(dt.pfit, use.n=TRUE, all=TRUE, cex=.8)
+
+# plot the tree
+rattle::fancyRpartPlot(dt.pfit, sub = "Decision Tree to Predict Customer Acquisition") 
+```
+
+
+
+```{r}
+# Get predictions on the test set
+dt.ppred = predict(dt.pfit, newdata = test, type = "class")
+
+# Get the confusion matrix on the pruned tree
+dt.ppred.confusion <- table(dt.ppred, test$acquisition)
+dt.ppred.confusion
+
+# Get the accuracy of the prunned tree model
+dt.ppred.accuracy <- sum(diag(dt.ppred.confusion))/sum(dt.ppred.confusion)
+dt.ppred.accuracy
+```
+
+
+
+
