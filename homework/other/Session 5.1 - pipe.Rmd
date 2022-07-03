@@ -1,7 +1,7 @@
 ---
 title: "Pipe Operator"
-author: "Ashwin Malshe"
-date: "06/01/2021"
+author:
+date: 
 output: html_document
 ---
 
