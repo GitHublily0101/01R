@@ -1,6 +1,6 @@
 ---
 title: "Dow Jones Case Study"
-author: "Michael Adebisi, Lily He, Sadiyah Hotakey, Justin Howard, Olamiposi Sunmola "
+author: 
 date: "3/21/2022"
 output: html_document
 ---
