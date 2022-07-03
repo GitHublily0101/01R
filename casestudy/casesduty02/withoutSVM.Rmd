@@ -1,0 +1,527 @@
+---
+title: "Bookbinder_casestudy"
+author: ""
+date: "2/14/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+# Load the packages and the Data
+**Load the packages** 
+
+
+```{r}
+library(xlsx)
+library(readxl)
+library(car)
+library(PerformanceAnalytics)
+library(MASS)
+library(corrplot)
+library(dplyr)
+library(e1071) ##library for SVM functions
+library(ggplot2)
+library(tidyverse)
+library(readr)
+library(VIF)
+library(ResourceSelection)
+library(DescTools)
+library(caret)
+library(prediction)
+```
+
+
+**Load data**  
+```{r import-data, cache=TRUE}
+BBBC_Train = read_xlsx("BBBC-Train.xlsx")
+BBBC_Test = read_xlsx("BBBC-test.xlsx")
+```
+
+# Data manipulating and inspection for Linear Regression
+
+**Get to know the data** 
+```{r}
+dim(BBBC_Train)
+```
+**Data inspection**  
+
+Look at the data type, all columns are of type int
+We don't need Observation in this case
+The variable `Choice` and `Gender` should be factor variable, but we want to check the performance of a linear regression with this dataset, so we keep them as numer for now.  
+```{r}
+str(BBBC_Train)
+```
+**Remove Observation** 
+```{r}
+BBBC_Train$Observation <- NULL
+BBBC_Test <- BBBC_Test[-1]
+```
+
+
+**Look at NA's as missing value** 
+```{r}
+sum(is.na(BBBC_Train))
+sum(is.na(BBBC_Test))
+```
+
+**Correlation check**  
+When independent variables are highly correlated, change in one variable would cause change to another and so the model results fluctuate significantly. The model results will be unstable and vary a lot given a small change in the data or model.
+Multicollinearity occurs when independent variables in a regression model are correlated 
+`First_purchase` and `Last_Purchase` are strong correlated with 0.81 from the following correlation result.
+```{r}
+round(cor(BBBC_Train),2)
+```
+
+# Visual inspection
+**Plot the data in pairs** 
+```{r}
+pairs(BBBC_Train)
+```
+
+**Visual correlation**  
+```{r}
+chart.Correlation(BBBC_Train, histogram = FALSE, pch=19)
+```
+
+First_purchase and Last_Purchase are strong correlated with 0.81
+
+
+# Build a MutliLinear Regression model
+**Build a Multilinear Regression model and start to analyze**  
+```{r}
+bbbc.lm <- lm(Choice ~., data=BBBC_Train)  
+summary(bbbc.lm)
+```
+
+**Calculate Variance Inflation Factor (VIF) to detect multicollinearity** 
+```{r}
+car::vif(bbbc.lm)
+```
+A value greater than 10 indicates severe correlation between a given predictor variable and other predictor variables in the model. In this case, the coefficient estimates and p-values in the regression output are likely unreliable. So we remove `Last_pruchase` for the following model.
+
+**Remove Last_purchase and apply a stepwise model selection** 
+```{r}
+bbbc.lm_vif = lm(Choice ~ . -Last_purchase, data = BBBC_Train)
+starting.model <- bbbc.lm_vif
+simple.model <- lm(Choice ~ 1, data = BBBC_Train)
+stepmodel <- stepAIC(starting.model, scope = list(upper = starting.model, lower = simple.model), direction = "backward")
+```
+One thing to note about this process is that, although the two models’ AIC differ by less than 10, the chosen model is the model with fewer predictor variables because of the necessary balance between accuracy and complexity that AIC uses.
+
+**The Mutil Linear Regression Equation**  
+From our summary, we can also get the multiple linear regression equation: Choiceˆ=0.387614-0.128517*Gender+0.000343*Amount_purchased-0.014952*Frequency    +0.003758*First_purchase-0.046933*P_Child-0.063342*P_Cook-0.058483*P_DIY+0.195593*P_Art
+```{r}
+finalLM =lm(Choice ~ Gender + Amount_purchased + Frequency + First_purchase + 
+    P_Child + P_Cook + P_DIY + P_Art, data=BBBC_Train)
+summary(finalLM)
+```
+
+**Diagnostics plot and summary**  
+```{r}
+par(mfrow=c(2,2))
+plot(stepmodel)
+```
+
+The Residual vs Fitted plot indicates a linear regression might not a good choice.
+The is almost a sigmoid shape in the Normal Q-Q plot, no straight line.
+The scale-location plot makes trends in residuals more evident and, from this plot, we can see that there is likely a U-shaped trend in our residuals.
+The leverage plot graphs the standardized residuals against their leverage. It also includes the Cook’s distance boundaries. Any point outside of those boundaries would be an outlier in the x direction. Since we cannot even see the boundaries on our plot, we can conclude that we have no outliers.
+
+**Computer mean square error**  
+```{r}
+predLM = predict(finalLM, newdata = BBBC_Test)
+mean((predLM - BBBC_Test$Choice)^2)
+```
+The mean square error between the final Multilinear regression model and the test data is very small, it doesn't mean the Multilinear regression model is a good model. The reason is the response variable `Choixe` is a classification variable, only contains 0s and 1s, thus, square it won't change anything. This also indicates Multilinear regression model is not suit for this classification dataset.
+
+
+# Data manipulating and inspection for SVM
+**create factor variables**  
+Choice and gender are categorical, need to change to factor variables, create factor variables, Choicef and Genderf
+ChoiceF: 0 = nonpurchase; 1 = Purchase
+GenderF: 0 = Female; 1 = Male
+```{r}
+BBBC_Train$ChoiceF = factor(BBBC_Train$Choice)
+BBBC_Train$GenderF = factor(BBBC_Train$Gender)
+```
+
+ChoiceF: 0 = nonpurchase; 1 = Purchase
+GenderF: 0 = Female; 1 = Male
+```{r}
+BBBC_Test$ChoiceF = factor(BBBC_Test$Choice)
+BBBC_Test$GenderF = factor(BBBC_Test$Gender)
+```
+
+**How many values are in the target variable**  
+2096 = did not purchase; 204 = did purchase
+Purhcase = The Art History of Florence
+```{r}
+table(BBBC_Test$Choice)
+```
+
+
+# Build a SVM model
+**svm formulat using RBF kernel**  
+```{r}
+rbf_form = ChoiceF ~.-Choice - Gender
+```
+
+Setting the gamma and cost for the SVM rbf_form model
+gamma range 0.01 to 0.5 with increments of 0.01, 50 values for gamma
+cost range 0.1 to 5 with increments of 0.1, 50 values for cost
+tune svm will learn SVMs for 50 X 50 = 2500 possible combos of gamma and cost
+tune.svm will also use 10-fold cross validation to get classification error
+10 X 2500 = 25,000 SVMs
+
+
+# Data wrangling for Logistic Regression
+```{r}
+BBBC_Train$Choice <- as.factor(BBBC_Train$Choice)
+BBBC_Train$Gender <- as.factor(BBBC_Train$Gender)
+BBBC_Test$Choice <- as.factor(BBBC_Test$Choice)
+BBBC_Test$Gender <- as.factor(BBBC_Test$Gender)
+```
+
+
+```{r}
+set.seed(2021)
+pseudo.index <- sample(1:nrow(BBBC_Train), 0.7*nrow(BBBC_Train))
+BBBC.pseudo.train <- BBBC_Train[pseudo.index, ]
+BBBC.pseudo.test <- BBBC_Train[-pseudo.index, ]
+BBBC.pseudo.test.true <- BBBC.pseudo.test$Choice
+```
+
+# Creating the Logistic Regression model 
+last_purchase has high VIF so we are going to remove it
+```{r}
+glm.base<-glm(Choice ~ . - Last_purchase, BBBC.pseudo.train, family="binomial")
+```
+**Calculate Variance Inflation Factor (VIF) to detect multicollinearity** 
+
+# Creating the Logistic Regression model without last_purchase and first_purchase
+```{r}
+glm.base <- glm(Choice ~ . - Last_purchase - First_purchase, BBBC.pseudo.train, family = "binomial")
+```
+**Calculate Variance Inflation Factor (VIF) to detect multicollinearity** 
+```{r}
+#vif(glm.base, data = BBBC.pseudo.train, na.action = na.exclude)
+```
+
+Now that the VIF scores look good we can use this function as our base model
+
+# Run a stepwise model selction
+```{r}
+glm.null <- glm(Choice ~ 1, BBBC.pseudo.train, family = "binomial")
+glm.full <- glm(Choice ~ . - Last_purchase - First_purchase, BBBC.pseudo.train, family = "binomial")
+glm.step <- step(glm.null, scope  = list(upper = glm.full),
+                 direction = "both", tst = "Chisq", trace = F)
+summary(glm.step)
+```
+**Getting the odds by run exponential of coefficients
+```{r}
+exp(glm.step$coefficients)
+```
+
+# Summary for Logistic Regression model
+When all the other predictors remain constant, the summary suggests that the probability of purchasing The Art of History Florence change by:
+  1.a factor of 3.43 with every art book that is purchased
+  2.a factor of 0.915 with every unit increase in Frequency
+  3.Male customer 0.416 time of Female customer
+  4.0.775 times with every additional cookbook purchased
+  5.0.707 times when a DIY book is purchased
+  6.0.834 times when a childrens book is purchased
+  7.1.002 changes when every additional dollar is spent on a BBBC book.
+
+# goodness-of-fit check: Hosmer Lemeshow test
+```{r}
+hoslem.test(glm.step$y, fitted(glm.step), g=10)
+```
+A p-value=0.5222 of Hosmer and Lemeshow goodness of fit (GOF) test indicates we fail to reject the null hypothesis, so we can say that our stepwise logistical model fits the data well.
+
+# Checking for influential points
+```{r}
+plot(glm.step, which = 4)
+```
+**Evaluating this un-tuned, un-optimized model against the testing set**  
+```{r}
+glm.step.probs <- predict(glm.step, BBBC.pseudo.test, type = "response")
+glm.step.preds <- rep(0, length(glm.step.probs))
+glm.step.preds[glm.step.probs > 0.5]= 1
+
+```
+
+```{r}
+caret::confusionMatrix(as.factor(glm.step.preds), BBBC.pseudo.test$Choice, positive = "1")
+```
+The unoptimized models confusion matrix displays accuracy of 78.5% and holds a Sensitivity value of 38.9%. However, it has a specificity percent of 93.4%. When we apply this model to a profit making scheme it is essential that we restrict it to cases that predict Choice as "1".
+
+
+**Evaluating this un-tuned, un-optimized model against the testing set**  
+```{r}
+glm.step.probs <- predict(glm.step, BBBC_Test, type = "response")
+glm.step.preds <- rep(0, length(glm.step.probs))
+glm.step.preds[glm.step.probs > 0.5] = 1
+
+caret::confusionMatrix(as.factor(glm.step.preds), BBBC_Test$Choice, positive = "1")
+```
+The unoptimized models confusion matrix displays accuracy of 89.74% and holds a Sensitivity value of 38.9%. However, it has a specificity percent of 94.9%. When we apply this model to a profit making scheme it is essential that we restrict it to cases that predict Choice as "1". With that said, the Pos Pred Value is 41.1%
+
+**Finding out profit of unoptimized and untuned model.**  
+```{r}
+x_00 = 1990/2300
+x_01 = 130/2300
+x_10 = 106/2300
+x_11 = 74/2300
+no_cust = 50000
+cbind(x_00,x_01,x_10,x_11)
+```
+
+x_00: Proportion of people who will not buy book
+x_01: Proportion of people we predicted would not buy, but did
+x_10: Proportion of people we predicted would buy, but did not
+x_11:Proportion of people who will buy
+
+```{r}
+q1 = x_00*no_cust
+q2 = x_01*no_cust
+q3 = x_10*no_cust
+q4 = x_11*no_cust
+cbind(q1,q2,q3,q4)
+```
+**Number of people that mail is being sent to**  
+```{r}
+send = q3 + q4
+send
+```
+**Out of the people who got the mail who will buy?**  
+```{r}
+q4
+```
+
+**Proportion of people who will buy from the total sent**  
+```{r}
+p_sent = q4/send
+p_sent
+```
+
+**cost of total mail**
+```{r}
+cost_mail = send*.65
+cost_mail
+```
+**cost for buying and sending book to those who bought**  
+```{r}
+cost_buy = q4*15
+cost_buy
+```
+
+**overhead of boooks**  
+```{r}
+cost_OH = cost_buy*.45
+cost_OH
+```
+
+**revenue for those who bought**  
+
+```{r}
+rev_bought = q4*31.95
+rev_bought
+```
+
+**Profit of logistic model unoptimized**  
+```{r}
+profit_logit = rev_bought - cost_mail - cost_buy - cost_OH
+profit_logit
+```
+The unoptimized model profit is 13,865.22
+
+# Creating a Optimized Ligistic Model
+```{r}
+glm.step.preds <- rep(0, length(glm.step.probs))
+glm.step.preds[glm.step.probs > 0.22] = 1
+glm.step.probs <- predict(glm.step, BBBC_Test, type = "response")
+caret::confusionMatrix(as.factor(glm.step.preds), BBBC_Test$Choice, positive = "1")
+```
+
+The Optimized model accuracy is 70% with a sensitivity of of 73% and Specificity of 69.8%. The pos pred value has also dropped to 19%
+**Calculate profit**  
+```{r}
+x_00 = 1462/2300
+x_01 = 55/2300
+x_10 = 634/2300
+x_11 = 149/2300
+no_cust = 50000
+cbind(x_00,x_01,x_10,x_11)
+```
+
+x_00: Proportion of people who will not buy book
+x_01: Proportion of people we predicted would not buy, but did
+x_10: Proportion of people we predicted would buy, but did not
+x_11:Proportion of people who will buy
+
+```{r}
+q1 = x_00*no_cust
+q2 = x_01*no_cust
+q3 = x_10*no_cust
+q4 = x_11*no_cust
+cbind(q1,q2,q3,q4)
+```
+
+
+**Number of people that mail is being sent to**  
+```{r}
+send = q3 + q4
+send
+```
+**Out of the people who got the mail who will buy?**  
+```{r}
+q4
+```
+
+**Proportion of people who will buy from the total sent**  
+```{r}
+p_sent = q4/send
+p_sent
+```
+
+**cost of total mail**
+```{r}
+cost_mail = send*.65
+cost_mail
+```
+**cost for buying and sending book to those who bought**  
+```{r}
+cost_buy = q4*15
+cost_buy
+```
+
+**overhead of boooks**  
+```{r}
+cost_OH = cost_buy*.45
+cost_OH
+```
+
+**revenue for those who bought**  
+
+```{r}
+rev_bought = q4*31.95
+rev_bought
+```
+
+**Profit of logistic model unoptimized**  
+```{r}
+profit_logit = rev_bought - cost_mail - cost_buy - cost_OH
+profit_logit
+```
+Profit has increased to $21,975
+
+**Optimize Minimizing Error**  
+```{r}
+cut.seq <- seq(0.01, 0.99, by = 0.01)
+seq.glm <- glm(Choice ~ P_Art + Frequency + Gender + P_Cook + P_Child + P_DIY, family = "binomial", data = BBBC.pseudo.train)
+```
+
+```{r}
+err=c(); 
+for(i in 1:length(cut.seq)){
+  
+  est.prob = predict(seq.glm, newdata=BBBC.pseudo.test[ ,-1], type="response")  
+  est.class = ifelse(est.prob > cut.seq[i], 1, 0)   
+  
+  
+  err[i] = mean(BBBC.pseudo.test.true != est.class, na.rm=TRUE)  
+}
+```
+
+
+```{r}
+par(mfrow=c(1,1))
+plot(cut.seq, err, type="l")
+```
+
+```{r}
+min(err)
+cut.seq[which.min(err)]
+final.cut = cut.seq[which.min(err)]
+```
+
+```{r}
+seq.glm.probs <- predict(seq.glm, BBBC_Test, type = "response")
+seq.glm.preds <- rep(0, length(seq.glm.probs))
+seq.glm.preds[seq.glm.probs > final.cut] = 1
+
+caret::confusionMatrix(as.factor(seq.glm.preds), BBBC_Test$Choice, positive = "1")
+```
+
+
+**Calculate profit**  
+```{r}
+x_00 = 2023/2300
+x_01 = 145/2300
+x_10 = 73/2300
+x_11 = 59/2300
+cbind(x_00,x_01,x_10,x_11)
+```
+
+x_00: Proportion of people who will not buy book
+x_01: Proportion of people we predicted would not buy, but did
+x_10: Proportion of people we predicted would buy, but did not
+x_11:Proportion of people who will buy
+
+```{r}
+q1 = x_00*no_cust
+q2 = x_01*no_cust
+q3 = x_10*no_cust
+q4 = x_11*no_cust
+cbind(q1,q2,q3,q4)
+```
+
+
+**Number of people that mail is being sent to**  
+```{r}
+send = q3 + q4
+send
+```
+**Out of the people who got the mail who will buy?**  
+```{r}
+q4
+```
+
+**Proportion of people who will buy from the total sent**  
+```{r}
+p_sent = q4/send
+p_sent
+```
+
+**cost of total mail**
+```{r}
+cost_mail = send*.65
+cost_mail
+```
+**cost for buying and sending book to those who bought**  
+```{r}
+cost_buy = q4*15
+cost_buy
+```
+
+**overhead of boooks**  
+```{r}
+cost_OH = cost_buy*.45
+cost_OH
+```
+
+**revenue for those who bought**  
+
+```{r}
+rev_bought = q4*31.95
+rev_bought
+```
+
+**Profit of logistic model unoptimized**  
+```{r}
+profit_logit = rev_bought - cost_mail - cost_buy - cost_OH
+profit_logit
+```
+When we optimize the model to minimize errors there is an accuracy of 90.5. With this model, profit is 11217.39.
