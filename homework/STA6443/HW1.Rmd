@@ -1,0 +1,180 @@
+---
+title: "HW1"
+author: "Liping He"
+date: "9/2/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+require("knitr")
+opts_knit$set(root.dir="/Users/lilyhe/Documents/UTSA fall 2021/STA6443/week2")
+```
+
+
+Exercise 1
+(a) Create a combined mpg variable called MPG_Combo which combines 60% of the MPG_City and 40% of the MPG_Highway. Obtain a box plot for MPG_Combo and comment on what the plot tells us about fuel efficiencies
+
+```{r}
+cars=read.csv("Cars.csv", header = TRUE)  # read dataset 
+MPG_Combo <- 0.6*cars$MPG_City+0.4*cars$MPG_Highway  # combined mpg varialbe 
+cars=data.frame(cars, MPG_Combo)   # data frame with MPG_Combo
+
+```
+
+```{r}
+boxplot(cars$MPG_Combo,
+        main = "Distribution of MPG City HWY Combo",
+        ylab = "MPG Combo",
+        col = "green",
+        bolder ="Blue",
+        horizontal = FALSE
+)
+points(mean(cars$MPG_Combo,na.rm = TRUE),col ="red")
+```
+ 
+ 
+The box plot for MPG_Combo tells us, the mean and median of the usage of fuel are almost same. The data doesn't symmetric distributed because many large outliers. Since majority data located between 1st quartile % and 3rd quartitle, and close to the mean(the box isn't tall). That also tells us there is no significant difference among cars fuel usage, just few outliers indicate extreme large usage.
+ 
+ (b) Obtain box plots for MPG_Combo by Type and comment on any differences you notice between the different vehicle types combined fuel efficiency.
+```{r}
+boxplot(MPG_Combo ~ Type, data = cars, 
+        xlab = "Type",
+        ylab = "MPG Combo", 
+        main = "Distribution of MPG City&HWY by Type ",
+        varwidth = TRUE, 
+        col = c("green")
+)
+```
+From the box plot above, we notice that except Truck, other type of cars fuel usages are almost symmetric distributed, and the SUV might be more efficient in furl usage.
+
+
+
+(c) Obtain basic descriptive statistics for Horsepower for all vehicles. Comment on any general features and statistics of the data. Use visual and quantitative methods to comment on whether an assumption of Normality would be reasonable for Horsepower variable.
+
+```{r}
+#################################################
+# descriptive statistics for "Horsepower"
+#################################################
+summary(cars$Horsepower)
+mean(cars$Horsepower)
+var(cars$Horsepower)
+```
+The mean of Horsepower for all cars is 216.8 and the median is 210, they are very close. The max value is farther from the 3rd Qu than the min value from 1st Qu.
+
+
+```{r}
+########################
+# Normality check
+########################
+# qualitative way - visually check
+qqnorm(cars$Horsepower); qqline(cars$Horsepower, col = 2)
+```
+
+```{r}
+boxplot(cars$Horsepower,
+        main = "Distribution of MPG City HWY Combo",
+        ylab = "Horsepower",
+        col = "green",
+        bolder ="Blue",
+        horizontal = FALSE
+)
+points(mean(cars$Horsepower,na.rm = TRUE),col ="red")
+```
+
+
+```{r}
+# quantitative way - formal test
+shapiro.test(cars$Horsepower)
+```
+From Shapiro-Wilk normality test, the p-value = 2.32e-11, which is very small, smaller than 0.05, so we reject the null, we think data doesn't follow the normality distribution.
+
+
+(d) Use visual and quantitative methods to comment on whether an assumption of normality would be reasonable for Horsepower variable by Type, especially for Sports, SUV, and Truck (i.e., check normality of Horsepower from Type of i) Sprots, ii) SUV, and iii) Truck.
+
+```{r}
+ boxplot(Horsepower ~ Type,data= cars, subset=Type %in% c("Sports","SUV","Truck"), main="Horsepower by Type",
+        xlab="Type", ylab="Horsepower")
+```
+
+```{r}
+# normality check for each Type
+shapiro.test(cars[cars$Type=="Sports", "Horsepower"])
+shapiro.test(cars[cars$Type=="SUV", "Horsepower"])
+shapiro.test(cars[cars$Type=="Truck", "Horsepower"])
+```
+
+Based on visual and quantitative methods, an assumption of normality would not be reasonable for Horsepower variable by Type: Sports, SUV, and Truck, because all their P-values are smaller than 0.05, we have enough evidence to reject the null, thus we conclude that the data does not follow the normal distribution.
+
+Exercise 2: Hypothesis Testing
+Perform a hypothesis test of whether SUV has different horsepower than Truck, and state your conclusions
+
+```{r}
+#For two-sample test for Horsepower comparison between SUV and Truck
+#First check if BOTH are normally distributed
+#Horsepower (SUV vs. Truck)
+ boxplot(Horsepower ~ Type,data= cars, subset=Type %in% c("SUV","Truck"), main="Horsepower by Type",xlab="Type", ylab="Horsepower")
+```
+```{r}
+#Check if BOTH are normally distributed
+#Horsepower (SUV vs. Truck)
+shapiro.test(cars$Horsepower[cars$Type=="SUV"])
+shapiro.test(cars$Horsepower[cars$Type=="Truck"])
+```
+
+a) Which test should we perform, and why? Justify your answer based on findings on Exercise 1 (d).
+
+Both SUV and Truck's P-values are smaller than 0.05, so we reject the null, and we conclude that the data does not follow normal distribution. So, we choose Wilcoxon rank sum test.
+```{r}
+#filter "SUV" and "Truck"
+#ctl+shift+c
+# cars_SUV_Truck <- cars %>%
+#         filter(Type =="SUV" | Type == "Truck") %>%
+#         as.data.frame()
+
+# non-parametric wilcox test
+#wilcox.test(Horsepower ~ Type, data=cars_SUV_Truck, exact=FALSE)
+
+wilcox.test(Horsepower ~ Type, data= cars, subset=Type %in% c("SUV","Truck"), exact=FALSE)
+```
+
+b) Specify null and alternative hypotheses.
+
+ The null hypotheses is SUV and Truck have same horsepower.
+ The alternative hypotheses is SUV and Truck do not have same horsepower.
+ 
+c) State the conclusion based on the test result.
+
+The p-value equals 0.3942, which is greater than 0.05, so we do not have enough evidence to reject the null. So, we conclude that SUV and Truck have same horsepower.
+
+
+Exercise 3
+Perform a hypothesis test -whether Wind in July has a different speed (mph) than Wind in August.
+a) Which test should we perform, and why? See QQ-plot and perform Shapiro-Wilk test for normality check.
+
+```{r}
+qqnorm(airquality$Wind[airquality$Month==7]); qqline(airquality$Wind[airquality$Month==7], col = 2)
+qqnorm(airquality$Wind[airquality$Month==8]); qqline(airquality$Wind[airquality$Month==8], col = 2)
+shapiro.test(airquality[airquality$Month==7, "Wind"])
+shapiro.test(airquality[airquality$Month==8, "Wind"])
+```
+
+b) Specify null and alternative hypotheses
+ The null hypotheses is Wind in July has a same speed (mph) than Wind in August.
+ The alternative hypotheses is Wind in July has a different speed (mph) than Wind in August.
+ 
+c) State the conclusion based on the test result.
+From the Q-Q plot we see most of data falls to the stringt line, and from Shapiro-Wilk normality test, both of the p-vulues of July and Auguest are greater then 0.05, so we think the data are normal distributed, and we choose var test to check if they have equal variance.
+
+```{r}
+var.test(Wind ~ Month, airquality, subset=Month %in% c(7,8), 
+         alternative = "two.sided")
+```
+
+The p-value from var_test is 0.7418,  which is greater then 0.05, so wo conclude that July and Auguest have equal variance, so we choose pool test.
+
+```{r}
+t.test(Wind ~ Month, airquality, subset=Month %in% c(7,8), alternative = "two.sided", var.equal= TRUE)
+```
+
+From above Two Sample t-test, the p-value is 0.8527, greater than 0.05, so, we do not have enough evidence to reject the null, and we conclude that the wind speed in July and Auguest are same. 
