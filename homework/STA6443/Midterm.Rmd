@@ -1,6 +1,6 @@
 ---
 title: "Midterm"
-author: "Liping He"
+author: "Lily He"
 date: "10/4/2021"
 output: word_document
 ---
