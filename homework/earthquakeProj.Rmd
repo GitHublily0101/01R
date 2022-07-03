@@ -1,0 +1,275 @@
+---
+title: "Earthquake Project"
+author: "Lily He"
+date: "11/10/2021"
+output: html_document
+runtime: shiny
+---
+
+```{r setup, include=FALSE,echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(stringr)
+library(ggplot2)
+library(ggmap)
+library(sp)
+library(maptools)
+library(maps)
+library(plyr)
+library(dplyr)
+library(tidyverse)
+library(lubridate)
+library(highcharter)
+library(reshape2)
+library(datasets)
+```
+
+## R Markdown
+
+```{r}
+earthqk <- readr::read_csv('world.csv')
+```
+
+```{r}
+earthqk_over6 <- earthqk %>% 
+  #mutate(mag =as.integer(mag)) %>% 
+  mutate(mag = case_when(
+            mag >= 8.0 ~ 8.0,
+            mag >= 7.0 ~ 7.0,
+            mag >= 6.5 ~ 6.5,
+            mag >= 6.0 ~ 6.0))%>%
+  dplyr::mutate(year = lubridate::year(time), 
+                month = lubridate::month(time), 
+                day = lubridate::day(time))
+```
+
+```{r}
+earthqk_over6$region <- as.factor(word(earthqk_over6$place, -1, sep = fixed(','))) 
+```
+
+```{r}
+earthqk_over6_total <- earthqk_over6 %>% 
+  select(month, mag)%>% 
+  group_by(month, mag) %>% 
+  dplyr::summarise(count=n())
+```
+
+```{r}
+hchart(earthqk_over6_total, "column", hcaes(x = month.abb[month], y = count, group = mag)) %>% 
+  hc_plotOptions(column = list(stacking = "normal")) %>% 
+  hc_legend(backgroundColor =  '#FCFFC5',
+            title = list(text = "Magnitude Level",align = "left")) %>% 
+  hc_tooltip(pointFormat = " <b>{point.y}</b><br/>") %>% 
+  hc_xAxis(title = list(text = "")) %>% 
+  hc_title( text = "World Earthquake Distribution by Month",style = list(fontWeight = "bold", fontSize = "30px")) %>% 
+  hc_yAxis(
+    title = list(
+      text = "Numver of Earthquakes",
+            style = list(
+            fontWeight = "bold",   # Bold
+            fontSize = '1.4em'    # 1.4 x tthe size of the default text
+            #color = "#7cb5ec"      # Hex code for the default blue
+            )))
+```
+
+```{r}
+earthqk_reg <-
+  earthqk_over6 %>% 
+  drop_na(region)
+```
+
+```{r}
+earthqk_reg_sum <-
+  earthqk_reg %>% 
+  select(region)%>% 
+  group_by(region) %>% 
+  dplyr::summarise(count=n())
+
+earthqk_reg_top5 <-head(arrange(earthqk_reg_sum,desc(count)), n = 5)
+```
+
+```{r}
+earthqk_reg_sum_top5 <-
+earthqk_over6 %>% 
+  inner_join(earthqk_reg_top5, by=c("region"="region")) 
+```
+
+```{r}
+dat <-
+earthqk_reg_sum_top5 %>% 
+  select(region, month,count) %>% 
+  group_by(region, month,count) %>% 
+  dplyr::summarise(count_reg=n())
+```
+
+```{r}
+dat2<-data.frame(dat) %>% 
+  mutate(regionnum = paste(region,count)) %>% 
+  #mutate(month=month.abb[month]) %>% 
+  select(regionnum,month,count_reg)%>% 
+  spread(key = 'regionnum', value = 'count_reg') 
+```
+
+```{r}
+library(highcharter)
+
+rotate <- highcharter::JS(
+   "$(function() {
+
+      // Add mouse events for rotation
+      $('#chart3D').on('mousedown.hc touchstart.hc', function(eStart) {
+   
+         var chart = $(this).highcharts(); //Highcharts object
+
+         eStart = chart.pointer.normalize(eStart);
+
+         var posX = eStart.pageX,
+         posY = eStart.pageY,
+         alpha = chart.options.chart.options3d.alpha,
+         beta = chart.options.chart.options3d.beta,
+         newAlpha,
+         newBeta,
+         sensitivity = 5; // lower is more sensitive
+
+         $(document).on({
+
+            'mousemove.hc touchdrag.hc': function(e) {
+
+               // Run beta
+               newBeta = beta + (posX - e.pageX) / sensitivity;
+               chart.options.chart.options3d.beta = newBeta;
+
+               // Run alpha
+               newAlpha = alpha + (e.pageY - posY) / sensitivity;
+               chart.options.chart.options3d.alpha = newAlpha;
+
+               chart.redraw(false);
+            },
+
+            'mouseup touchend': function() {
+               $(document).off('.hc');
+            } 
+         });
+      });
+   });"
+)
+
+
+```
+
+```{r}
+tags$head(tags$script(src = 'rotate.js'))
+
+```
+
+```{r}
+library(shiny)
+#sorce from https://redoakstrategic.com/rshiny3d/
+shinyApp(
+ui <- fluidPage(
+   tags$head(tags$script(rotate))
+   , fluidRow(
+      highchartOutput('chart3D')
+   )   
+   , fluidRow(
+      highchartOutput('chart2D')
+   )
+
+),
+
+server <- function(input, output, session) {
+  
+  
+     data_series2 <- dat2[2:length(dat2)]
+
+   # optional step
+   # orders data series according to which has highest max
+   col_max2 <- sapply(data_series2, FUN = min, na.rm = TRUE)
+   data_series2 <- data_series2[,order(col_max2)]
+
+   categories2 <- names(data_series2)
+
+   ds2 <- lapply(seq(length(categories2)), function(x){
+      list(
+         name = categories2[x], 
+         data = data_series2[[categories2[x]]]
+      ) 
+   })
+  
+   data_series <- dat2[2:length(dat2)]
+
+   # optional step
+   # orders data series according to which has highest max
+   col_max <- sapply(data_series, FUN = min, na.rm = TRUE)
+   data_series <- data_series[,order(col_max)]
+
+   categories <- names(data_series)
+
+   ds <- lapply(seq(length(categories)), function(x){
+      list(
+         name = categories[x], 
+         data = data_series[[categories[x]]]
+      ) 
+   })
+    
+   output$chart2D <- renderHighchart({
+
+      hc <- highchart() %>%
+         hc_xAxis(categories = month.abb[dat2$month]
+                  , labels = list(rotation = 0)) %>%
+         hc_colors(colors = c('#3bb300', '#b5ae6e', '#00bfff', '#86592d','#AD00F7')) %>%
+         hc_add_series_list(ds) %>%
+         #hc_title(text = 'World earthquake frequency by month') %>%
+         hc_tooltip(pointFormat = "<b>{point.y}</b><br/>") %>% 
+         hc_chart(type = "column")
+
+      hc
+
+   })
+
+   
+   output$chart3D <- renderHighchart({
+
+      hc <- highchart() %>%
+         hc_xAxis(categories2 = dat2$month
+                  , labels = list(rotation = 0)) %>%
+         hc_colors(colors = c('#3bb300', '#b5ae6e', '#00bfff', '#86592d','#AD00F7')) %>%
+         hc_add_series_list(ds2) %>%
+         hc_title(text = 'World earthquake frequency by month',style = list(fontWeight = "bold", fontSize = "30px")) %>%
+         hc_chart(type = "column", 
+                  options3d = list(enabled = TRUE
+                                   , beta = 20
+                                   , alpha = 30
+                                   , depth = 400
+                                   , viewDistance = 5)) %>%
+        #hc_legend(enabled = FALSE) %>% 
+        hc_tooltip(pointFormat = " <b>{point.y}</b><br/>") %>% 
+        hc_legend(
+        align = "left",
+        verticalAlign = "top",
+        layout = "vertical",
+        x = 0,
+        y = 100,
+        backgroundColor =  '#FCFFC5',
+        title = list(text = "Top5 countries total earthquakes:"),style = list(fontWeight = "bold", fontSize = "20px")) %>% 
+         hc_plotOptions(
+            series = list(groupZpadding = 0
+                           , depth = 100
+                           , groupPadding = 0
+                           , grouping = FALSE
+                           , frame = list(
+                                     bottom = list(
+                                                size = 1
+                                                , color = 'rgba(0,0,0,0,0.05)'
+                                              )
+                                          )
+                          )
+                       )
+
+      hc
+
+   })
+})
+```
