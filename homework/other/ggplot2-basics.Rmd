@@ -1,6 +1,6 @@
 ---
 title: "ggplot2-basics"
-author: "Ashwin Malshe"
+author: "Lily He"
 date: "21 September 2021"
 output: html_document
 ---
