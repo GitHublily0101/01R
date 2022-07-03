@@ -1,6 +1,6 @@
 ---
 title: "HW1"
-author: "Liping He"
+author: "Lily He"
 date: "9/2/2021"
 output: html_document
 ---
