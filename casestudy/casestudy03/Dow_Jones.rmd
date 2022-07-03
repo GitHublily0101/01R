@@ -1,0 +1,474 @@
+---
+title: "Dow Jones Case Study"
+author: "Michael Adebisi, Lily He, Sadiyah Hotakey, Justin Howard, Olamiposi Sunmola "
+date: "3/21/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tseries)
+```
+
+```{r}
+library(quantmod)
+```
+
+```{r}
+dow <- read.csv("/Users/lilyhe/Documents/01 UTSA Spring 2022/02_DA6813/casestudy/casestudy03/dow_jones_index.data", header = TRUE)
+```
+
+```{r}
+#Remove incomplete cases of data object. Find missing NA values
+dow<-na.omit(dow)
+anyNA(dow)
+```
+
+```{r}
+#Compactly display internal structure of object
+str(dow)
+```
+
+```{r}
+#Factor variables & convert to numeric
+dow$date = lubridate::mdy(dow$date)
+dow$open = as.numeric(gsub("\\$", "", dow$open))
+dow$high = as.numeric(gsub("\\$", "", dow$high))
+dow$low = as.numeric(gsub("\\$", "", dow$low))
+dow$close = as.numeric(gsub("\\$", "", dow$close))
+dow$volume = as.numeric(dow$volume)
+dow$next_weeks_open = as.numeric(gsub("\\$", "", dow$next_weeks_open))
+dow$next_weeks_close = as.numeric(gsub("\\$", "", dow$next_weeks_close))
+str(dow)
+```
+
+```{r}
+library(dplyr)
+```
+
+```{r}
+#Categorize data into groups by stock then induce lagged values for the variable.
+
+#Open
+dow=dow %>%
+group_by(stock)%>%
+  mutate(open.lag=dplyr::lag(open,n=1))
+
+#High
+dow=dow %>%
+group_by(stock)%>%
+  mutate(high.lag=dplyr::lag(high,n=1))
+
+#Low
+dow=dow %>%
+group_by(stock)%>%
+  mutate(low.lag=dplyr::lag(low,n=1))
+
+#Close 
+dow=dow %>%
+group_by(stock)%>%
+  mutate(close.lag=dplyr::lag(close,n=1))
+
+
+#Percent_Change_Volume_Over_Last_Week 
+dow=dow %>%
+group_by(stock)%>%
+  mutate(percent_change_volume_over_last_wk.lag=dplyr::lag(percent_change_volume_over_last_wk,n=1))
+
+# Percent_Change_Next_Weeks_Price 
+dow=dow %>%
+group_by(stock)%>%
+  mutate(percent_change_next_weeks_price.lag=dplyr::lag(percent_change_next_weeks_price,n=1))
+
+#Percent_Return_Next_Dividend
+dow=dow %>%
+group_by(stock)%>%
+  mutate(percent_return_next_dividend.lag=dplyr::lag(percent_return_next_dividend,n=1))
+
+#Next_Weeks_Close_Lag
+dow=dow %>%
+group_by(stock)%>%
+  mutate(next_weeks_close.lag=dplyr::lag(next_weeks_close,n=1))
+
+#Next_Weeks_Open_Lag
+dow= dow %>%
+  group_by(stock) %>%
+  mutate(next_weeks_open.lag = dplyr::lag(next_weeks_open, n =1))
+```
+
+```{r}
+#Split data into train & test data sets.
+newdata<-split(dow,dow$quarter)
+train<-newdata[[1]]
+test<-newdata[[2]]
+train1<-split(train,train$stock)
+test1<-split(test,test$stock)
+```
+
+
+```{r}
+library(tree)
+library(caret)
+```
+
+```{r}
+#Decision Tree model
+treefxn <- function(trainstock, teststock, formula){
+  set.seed(123)
+  treefit <- tree(formula, data = trainstock)
+  tree.predict <- predict(treefit, newdata = teststock)
+  tree.predict <- ifelse(tree.predict >= mean(tree.predict), 1,0)
+  tree.obs <- ifelse(teststock$percent_change_next_weeks_price >= mean(teststock$percent_change_next_weeks_price ),1,0)
+  table <- table(tree.obs, tree.predict); print(summary(treefit))
+  accuracy <- sum(diag(table))/13
+  print(accuracy)
+}
+
+formula = percent_change_next_weeks_price ~ open.lag + high.lag + low.lag + close.lag + next_weeks_open.lag + next_weeks_close.lag + percent_return_next_dividend.lag + volume
+
+#Create for loop for each stock.
+for (i in names(train1)){
+x= train1[[i]]
+y= test1[[i]]
+treefxn(x,y, formula)
+}
+```
+
+```{r}
+# CAPM and Stock Risk and Reward Calculations
+dow_jones_2 = read.csv("/Users/lilyhe/Documents/01 UTSA Spring 2022/02_DA6813/casestudy/casestudy03/dow_jones_index.data", header = TRUE)
+
+# convert factors to numeric
+dow_jones_2$open=as.numeric(gsub("\\$","",dow_jones_2$open))
+
+dow_jones_2$high=as.numeric(gsub("\\$","",dow_jones_2$high))
+
+dow_jones_2$low=as.numeric(gsub("\\$","",dow_jones_2$low))
+
+dow_jones_2$close=as.numeric(gsub("\\$","",dow_jones_2$close))
+
+dow_jones_2$next_weeks_open=as.numeric(gsub("\\$","",dow_jones_2$next_weeks_open))
+
+dow_jones_2$next_weeks_close=as.numeric(gsub("\\$","",dow_jones_2$next_weeks_close))
+
+#Creating a 30-element list, each element being a single stock
+DowJData3 <- split(dow_jones_2, dow_jones_2$stock)
+
+#Reading in reference data
+SP500Dta <- read.csv("/Users/lilyhe/Documents/01 UTSA Spring 2022/02_DA6813/casestudy/casestudy03/^GSPC.csv")
+
+#The reference data must match the actual Dow stock data in length
+#Therefore, only the first 25 rows are extracted:
+SP500Dta<-SP500Dta[1:25,]
+
+```
+
+```{r}
+#Compute percent change (using Delt function) for the closing price - reference data
+ReturnSP500 = na.omit(Delt(SP500Dta[,5]))
+
+#Compute percent change (using Delt function) for the closing price for each of the stocks
+ReturnAA = na.omit(Delt(DowJData3$AA[,7]))
+ReturnAXP = na.omit(Delt(DowJData3$AXP[,7]))
+ReturnBA = na.omit(Delt(DowJData3$BA[,7]))
+ReturnBAC = na.omit(Delt(DowJData3$BAC[,7]))
+ReturnCAT = na.omit(Delt(DowJData3$CAT[,7]))
+ReturnCSCO = na.omit(Delt(DowJData3$CSCO[,7]))
+ReturnCVX = na.omit(Delt(DowJData3$CVX[,7]))
+ReturnDD = na.omit(Delt(DowJData3$DD[,7]))
+ReturnDIS = na.omit(Delt(DowJData3$DIS[,7]))
+ReturnGE = na.omit(Delt(DowJData3$GE[,7]))
+ReturnHD = na.omit(Delt(DowJData3$HD[,7]))
+ReturnHPQ = na.omit(Delt(DowJData3$HPQ[,7]))
+ReturnIBM = na.omit(Delt(DowJData3$IBM[,7]))
+ReturnINTC = na.omit(Delt(DowJData3$INTC[,7]))
+ReturnJNJ = na.omit(Delt(DowJData3$JNJ[,7]))
+ReturnJPM = na.omit(Delt(DowJData3$JPM[,7]))
+ReturnKO = na.omit(Delt(DowJData3$KO[,7]))
+ReturnKRFT = na.omit(Delt(DowJData3$KRFT[,7]))
+ReturnMCD = na.omit(Delt(DowJData3$MCD[,7]))
+ReturnMMM = na.omit(Delt(DowJData3$MMM[,7]))
+ReturnMRK = na.omit(Delt(DowJData3$MRK[,7]))
+ReturnMSFT = na.omit(Delt(DowJData3$MSFT[,7]))
+ReturnPFE = na.omit(Delt(DowJData3$PFE[,7]))
+ReturnPG = na.omit(Delt(DowJData3$PG[,7]))
+ReturnT = na.omit(Delt(DowJData3$T[,7]))
+ReturnTRV = na.omit(Delt(DowJData3$TRV[,7]))
+ReturnUTX = na.omit(Delt(DowJData3$UTX[,7]))
+ReturnWMT= na.omit(Delt(DowJData3$WMT[,7]))
+ReturnVZ = na.omit(Delt(DowJData3$VZ[,7]))
+ReturnXOM = na.omit(Delt(DowJData3$XOM[,7]))
+```
+
+```{r}
+#combine the percent change for the closing price for both the reference and actual data
+MyData = cbind(ReturnSP500,ReturnAA,ReturnAXP,
+               ReturnBA, 
+               ReturnBAC,
+               ReturnCAT,
+               ReturnCSCO,
+               ReturnCVX,
+               ReturnDD,
+               ReturnDIS,
+               ReturnGE,
+               ReturnHD,
+               ReturnHPQ,
+               ReturnIBM,
+               ReturnINTC,
+               ReturnJNJ,
+               ReturnJPM,
+               ReturnKO,
+               ReturnKRFT,
+               ReturnMCD,
+               ReturnMMM,
+               ReturnMRK,
+               ReturnMSFT,
+               ReturnPFE,
+               ReturnPG,
+               ReturnT,
+               ReturnTRV,
+               ReturnUTX,
+               ReturnWMT,
+               ReturnVZ,
+               ReturnXOM)
+               
+colnames(MyData) = c("SP500", "AA", "AXP", "BA", "BAC", "CAT", "CSCO", "CVX", "DD", "DIS", "GE", "HD", "HPQ", "IBM", "INTC", "JNJ", "JPM", "KO", "KRFT", "MCD", "MMM", "MRK", "MSFT", "PFE", "PG", "T", "TRV", "UTX", "WMT", "VZ", "XOM")
+head(MyData)
+```
+
+```{r}
+#Compute mean and standard deviation for each of the columns in the combined dataset
+DataMean = apply(MyData, 2, mean)
+DataSD = apply(MyData, 2, sd)
+
+#Bind means and standard deviations into one object
+cbind(DataMean, DataSD)
+```
+
+```{r}
+#Predict percent changes for the closing price for each of the stocks with the reference (SP500) percent change in closing price
+
+#1
+lm.AA <- lm(AA~ SP500, data = as.data.frame(MyData))
+#2
+lm.AXP <- lm(AXP~ SP500, data = as.data.frame(MyData))
+#3
+lm.BA <- lm(BA~ SP500, data = as.data.frame(MyData))
+#4
+lm.BAC <- lm(BAC~ SP500, data = as.data.frame(MyData))
+#5
+lm.CAT <- lm(CAT~ SP500, data = as.data.frame(MyData))
+#6
+lm.CSCO <- lm(CSCO~ SP500, data = as.data.frame(MyData))
+#7
+lm.CVX <- lm(CVX~ SP500, data = as.data.frame(MyData))
+#8
+lm.DD <- lm(DD~ SP500, data = as.data.frame(MyData))
+#9
+lm.DIS <- lm(DIS~ SP500, data = as.data.frame(MyData))
+#10
+lm.GE <- lm(GE~ SP500, data = as.data.frame(MyData))
+#11
+lm.HD <- lm(HD~ SP500, data = as.data.frame(MyData))
+#12
+lm.HPQ <- lm(HPQ~ SP500, data = as.data.frame(MyData))
+#13
+lm.IBM <- lm(IBM~ SP500, data = as.data.frame(MyData))
+#14
+lm.INTC <- lm(INTC~ SP500, data = as.data.frame(MyData))
+#15
+lm.JNJ <- lm(JNJ~ SP500, data = as.data.frame(MyData))
+#16
+lm.JPM <- lm(JPM~ SP500, data = as.data.frame(MyData))
+#17
+lm.KO <- lm(KO~ SP500, data = as.data.frame(MyData))
+#18
+lm.KRFT <- lm(KRFT~ SP500, data = as.data.frame(MyData))
+#19
+lm.MCD <- lm(MCD~ SP500, data = as.data.frame(MyData))
+#20
+lm.MMM <- lm(MMM~ SP500, data = as.data.frame(MyData))
+#21
+lm.MRK <- lm(MRK~ SP500, data = as.data.frame(MyData))
+#22
+lm.MSFT <- lm(MSFT~ SP500, data = as.data.frame(MyData))
+#23
+lm.PFE <- lm(PFE~ SP500, data = as.data.frame(MyData))
+#24
+lm.PG <- lm(PG~ SP500, data = as.data.frame(MyData))
+#25
+lm.T <- lm(T~ SP500, data = as.data.frame(MyData))
+#26
+lm.TRV <- lm(TRV~ SP500, data = as.data.frame(MyData))
+#27
+lm.UTX <- lm(UTX~ SP500, data = as.data.frame(MyData))
+#28
+lm.WMT <- lm(WMT~ SP500, data = as.data.frame(MyData))
+#29
+lm.VZ <- lm(VZ~ SP500, data = as.data.frame(MyData))
+#30
+lm.XOM <- lm(XOM~ SP500, data = as.data.frame(MyData))
+```
+
+```{r}
+#Retrieve beta coefficients for each of the stocks by accessing the regression summary 
+#Higher beta - higher risk
+
+#1
+BetaDowAA <- summary(lm.AA)$coefficient[2,1]
+paste("Beta of AA:" , BetaDowAA)
+
+#2
+BetaDowAXP <- summary(lm.AXP)$coefficient[2,1]
+paste("Beta of AXP:" , BetaDowAXP)
+
+```
+
+SVM Section:
+```{r}
+library(e1071) ##library for SVM functions
+```
+
+Read in the data
+```{r}
+dow1 <- read.csv("/Users/lilyhe/Documents/01 UTSA Spring 2022/02_DA6813/casestudy/casestudy03/dow_jones_index.data")
+View(dow1)
+```
+
+
+Add continuous Y variable, this is for simple coding for the predictor variable percent_change_next_weeks_price
+```{r}
+dow2 <- dow1 %>% 
+mutate(y = dow1$percent_change_next_weeks_price)
+
+```
+
+
+Add buy variable, if percent_change_next_weeks_price > 0 = 1 else = 0
+What we are doing is creating a binary predictor variable, 
+1 indicates buy (percentage increase next weeks price)
+0 indicates do not buy (percentage decrease in next weeks price)
+```{r}
+dow2 <- dow2 %>%
+mutate(buy = ifelse(percent_change_next_weeks_price > 0,1,0))
+str(dow2)
+```
+
+
+Change buy variable to a factor
+```{r}
+dow2$buy = as.factor(dow2$buy)
+str(dow2$buy)
+```
+
+
+create week variable, instead of using date which is listed as a character variable
+create a variable called 'week' to make it easy to code for the models
+seq week 1 to week 750 (number of observatins/rows in the dataset)
+```{r}
+dow2 <- dow2 %>%
+mutate(week = seq(from = 1, to = dim(dow2)[1], by = 1))
+str(dow2)
+```
+
+
+Change chr variables to numeric
+```{r}
+dow2$open = as.numeric(gsub("\\$", "", dow2$open))
+dow2$high = as.numeric(gsub("\\$", "", dow2$high))
+dow2$low = as.numeric(gsub("\\$", "", dow2$low))
+dow2$close = as.numeric(gsub("\\$", "", dow2$close))
+dow2$volume = as.numeric(dow2$volume)
+dow2$next_weeks_open = as.numeric(gsub("\\$", "", dow2$next_weeks_open))
+dow2$next_weeks_close = as.numeric(gsub("\\$", "", dow2$next_weeks_close))
+str(dow2)
+```
+
+
+
+Create training data set
+```{r}
+train_dow = dow2 %>%
+  filter(quarter ==1)
+str(train_dow)
+```
+
+
+Create test data set
+```{r}
+test_dow = dow2 %>%
+  filter(quarter ==2)
+str(test_dow)
+```
+
+
+Creating the SVM RBF formula
+```{r}
+rbf_form = buy ~ . -quarter - stock - date - y
+```
+
+
+This may take 10 mins or so to run
+```{r}
+#tuned = tune.svm(rbf_formy, data = train_dow, gamma = seq(0.01, .5, by = 0.01), cost = seq(.1, 5, by = .1))
+#commented this line out to help run all lines of code
+```
+
+
+what is the optimal gamma and cost for the svm model?
+gamma = 0.01
+cost = 5
+```{r}
+#tuned$best.parameters
+#commented this line out to help run all lines of code
+```
+
+
+Creating the rbf Svm with the best parameters 
+The syntax for SVM from the package e1071 is as follows for the default kernel, which is radial basis 
+function (RBF): svm(formula = , data = , gamma =, cost =)
+
+```{r}
+rbf_svm = svm(formula = rbf_form, data = train_dow, gamma = 0.01, cost = 5)
+summary(rbf_svm)
+
+```
+
+
+Performance of the model, fit rbf_svm model on the test_dow dataset
+
+```{r}
+rbf_svm_predict = predict(rbf_svm, test_dow, type = "response")
+
+```
+
+
+Use the command "confusionMatrix" from the package caret to get accuracy of the
+model prediction. For the confusionMatrix the variable has to be a factor (categorical variable)
+
+```{r}
+caret::confusionMatrix(as.factor(test_dow$buy), as.factor(rbf_svm_predict))
+```
+
+Creating the linear svm model
+```{r}
+svm_lin_form = buy ~.-quarter -stock -date -y
+lin_svm = svm(formula = svm_lin_form, data = train_dow, kernel = "linear", cost = 5, scale = FALSE)
+summary(svm_lin_form)
+```
+
+
+Performance of the model, fit lin_svm model on the BBBC_Test dataset
+```{r}
+lin_svm_predict = predict(lin_svm, test_dow, type = "response")
+```
+
+Use the command "confusionMatrix" from the package caret to get accuracy of the
+model prediction. For the confusionMatrix the variable has to be a factor (categorical variable)
+
+```{r}
+caret::confusionMatrix(as.factor(test_dow$buy), as.factor(lin_svm_predict))
+```

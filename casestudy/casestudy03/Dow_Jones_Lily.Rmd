@@ -1,0 +1,252 @@
+---
+title: "Dow Jones case study"
+author: "Justin Howard, Sadiyah Hotakey, Michael Adebisi, Olamiposi Sunmola, Lily He"
+date: "3/18/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+```{r}
+library("dplyr")
+library("caret")
+library("tree")
+library("quantmod")
+library("e1071")
+library("car")
+```
+
+```{r}
+dow_jones <- read.csv("/Users/lilyhe/Documents/01 UTSA Spring 2022/02_DA6813/casestudy/casestudy03/dow_jones_index.data")
+
+```
+
+
+* Remove $ sign in the dataframe, and change data type to numeric
+```{r}
+clean_list = c("open","high","low","close","next_weeks_open","next_weeks_close")
+dow_jones[clean_list] <- apply(dow_jones[clean_list], 2, function(y) as.numeric(gsub("\\$", "", y)))
+```
+
+
+```{r}
+str(dow_jones)
+```
+* Change character to factor
+```{r}
+dow_jones <- as.data.frame(lapply(dow_jones, function(x) if(is.character(x)){
+  x = as.factor(x)
+} else x))
+
+```
+
+* Change date format
+```{r}
+dow_jones$date <- as.Date(dow_jones$date, format = "%m/%d/%y")
+```
+
+
+* Backup half-processed data for later use
+```{r}
+dow_jones_bak <-dow_jones
+```
+
+* Remove missing values
+```{r}
+dow_jones <- na.omit(dow_jones)
+anyNA(dow_jones)
+```
+
+
+* Sample lag polts
+```{r}
+lag.plot(dow_jones$open,set.lag=1:12)
+```
+
+* Create lag 1 for all predictor variables since looks like log 1 shows the most correlation. Previous column list is reused, plus two more columns
+```{r}
+# clean_list <- append(clean_list, c("percent_change_volume_over_last_wk","percent_return_next_dividend","percent_change_next_weeks_price"))
+# for(i in clean_list){
+#   dow_jones[paste0("lag_", i)] <- dplyr::lag(dow_jones[i],n=1, by=dow_jones$stock, order_by = dow_jones$date)
+# }
+```
+
+
+```{r}
+clean_list <- append(clean_list,
+                      c("percent_change_volume_over_last_wk","percent_return_next_dividend","percent_change_next_weeks_price"))
+for(i in clean_list){
+exetext <- paste0('dow_jones= dow_jones %>%group_by(stock)%>%arrange(date) %>% mutate(lag_',i,'=dplyr::lag(',i,",n=1))")
+eval(parse(text =noquote(exetext)))
+}
+```
+
+
+* Split data into training(quarter 1) and test data(quarter 2)
+```{r}
+newdata<-split(dow_jones,dow_jones$quarter)
+train<-newdata[[1]]
+test<-newdata[[2]]
+train<-split(train,train$stock)
+test<-split(test,test$stock)
+```
+
+* Multicollinearity
+```{r}
+model = glm(percent_change_next_weeks_price ~ lag_open + lag_high + lag_low +  lag_close + volume, data=train[[1]])
+car::vif(model)
+```
+We removed close.lag from our model due to VIF is very high.
+```{r}
+model = glm(percent_change_next_weeks_price ~ lag_open + lag_high + lag_low +   volume, data=train[[1]])
+car::vif(model)
+```
+
+* Function for perform Linear Regression model, SVR model and Decision tree model(Note for comment out: tune model comment out for svm due to time concern and the same result as no tune; model detail and polt due to too many output. Anytime you want to check these, just simply remove the comment out symbol.)
+```{r}
+modlefn <- function (trainstock, teststock,formula, modelnm) {
+    set.seed(123)
+    if (modelnm == "glm") {
+      mdfit <- glm(formula, data=trainstock)
+      
+    } else if (modelnm == "svm") {
+      tuned = tune.svm(formula, data = trainstock,
+                       gamma = seq(0.01, 0.1, by = 0.01),
+                       cost = seq(0.1, 1, by = 0.1))
+      mdfit <- svm(formula, data = trainstock,kernel="linear",
+                   cost = tuned$best.parameters$cost,
+                   gamma = tuned$best.parameters$gamma)
+
+      # mdfit <- svm(formula, data = trainstock, kernel="linear",
+      #               gamma = seq(0.01, 0.1, by = 0.01),
+      #              cost = seq(0.1, 1, by = 0.1))
+      
+    } else if (modelnm == "tree") {
+      mdfit <- tree(formula, data = trainstock)
+    }
+    
+    mdpred <- predict(mdfit, newdata = teststock)
+    mse <-mean((teststock$percent_change_next_weeks_price-mdpred)^2)
+    #print(summary(mdfit))
+    #print("make a plot with actual and predicted data")
+    #plot(trainstock$percent_change_next_weeks_price, ylab = "percent_change_next_weeks_price", xlab = "weeks", pch = ".")
+    # points(mdpred, col="red", pch=".")
+    list(mse = round(mse,2), pred = mdpred)
+  }
+```
+
+
+
+* Generate Linear Regression model, SVR model and Decision tree model, and compute MSE
+```{r}
+formula <- percent_change_next_weeks_price ~ lag_open + lag_high + lag_low + volume 
+modelnm <-c("glm","svm","tree")
+accuracy_list = vector(mode="list")
+
+for (model_name in modelnm)
+{
+  print(noquote("--------------------"))
+  print(noquote(paste0(model_name," model MSE")))
+  print(noquote("--------------------"))
+   for (stock_name in names(train)){
+    x = train[[stock_name]]
+    y = test[[stock_name]]
+    model = modlefn(x,y,formula, model_name)
+    accuracy_list[stock_name]=model$mse
+   }
+
+  print(t(data.frame(accuracy_list)))
+  print("Mean MSE")
+ print(mean(t(data.frame(accuracy_list))))
+}
+```
+
+* create test set 2 (ONLY with last weeks data)
+```{r}
+lastwk=split(dow_jones,dow_jones$date)
+lastwk = lastwk[[24]]
+lastwk = split(lastwk, lastwk$stock)
+```
+
+* Loop on each stock using SVR model, and predicting on lastwk data
+```{r}
+MSE_list <- list()
+model_name = "svm"
+for (stock_name in names(train)){
+    x = train[[stock_name]]
+    y = lastwk[[stock_name]]
+    model = modlefn(x,y,formula, model_name)
+    MSE_list[stock_name]=model$pred
+   }
+print(str(MSE_list))
+pred.df=data.frame(MSE_list)
+pred.df=t(pred.df)
+```
+
+* CAPM and Stock Risk and Reward Calculations
+```{r}
+SP500Dta <- read.csv("/Users/lilyhe/Documents/01 UTSA Spring 2022/02_DA6813/casestudy/casestudy03/^GSPC.csv")
+```
+
+```{r}
+#The reference data must match the actual Dow stock data in length 
+#Therefore, only the first 25 rows are extracted: 
+SP500Dta<-SP500Dta[1:25,]
+ReturnSP500 = na.omit(Delt(SP500Dta[,5]))
+```
+
+```{r}
+down_jones_camp <- split(dow_jones_bak, dow_jones_bak$stock)
+```
+
+* Compute percent change for each stock
+```{r}
+my_list1 <- list() 
+my_list2 <- list() 
+Delt_list <- names(down_jones_camp)
+for(i in Delt_list){
+  a <- paste0("na.omit(Delt(down_jones_camp$",i,"[,7]))")
+  b <- paste0("Return", i)
+  c <- paste0(b,"<-",a)
+  eval(parse(text =c))
+  my_list1 <- append(my_list1,i)
+  my_list2 <- append(my_list2,b)
+}
+```
+
+
+* Combine datas and rename columns name
+```{r}
+MyData =eval(parse(text =paste0("cbind(ReturnSP500,",toString(my_list2),")")))
+colnames(MyData)= c( "SP500",my_list1)
+head(MyData)
+```
+
+* Compute mean and standard deviation for each stock in closing price
+```{r}
+DataMean = apply(MyData, 2, mean)
+DataSD = apply(MyData, 2, sd)
+cbind(DataMean, DataSD)
+```
+* Predict percent changes for the closing price for each of the stocks with the reference (SP500) percent change in closing price
+```{r}
+beta_list = list()
+lmdata <- as.data.frame(MyData)
+for(i in my_list1){
+  lmsummary <- paste0("summary(lm(",i," ~ SP500, data = lmdata ))$coefficient[2,1]")
+  exelm <- eval(parse(text =noquote(lmsummary)))
+  beta_list[i] <- exelm
+}
+beta.df <-t(data.frame(beta_list))
+print(beta.df)
+```
+* combine predictions and beta
+```{r}
+output = cbind(pred.df,beta.df)
+colnames(output) = c("Percent Change Next Weeks Price Predictions", "Beta")
+output
+```
+* Using the SP500 data as the market, we note that a beta greater than 1 indicates that the security’s price is more volatile than the market. We can see that AA and AXP have low return and high risk associated with it, so their behavior is not good in the stock market. Th better stocks to invest in would be CAT and CVX, DD, KO as they have extremely high return and are less risky than the market.
+
