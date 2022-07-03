@@ -1,6 +1,6 @@
 ---
 title: "Factors"
-author: "Ashwin Malshe"
+author: 
 date: ""
 output: html_document
 ---
