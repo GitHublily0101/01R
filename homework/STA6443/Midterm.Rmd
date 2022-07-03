@@ -1,0 +1,136 @@
+---
+title: "Midterm"
+author: "Liping He"
+date: "10/4/2021"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(DescTools); library(car)
+
+```
+#Exercise 1 
+```{r}
+
+# setwd("...")
+setwd("/Users/lilyhe/Documents/UTSA fall 2021/STA6443/midterm") 
+bweight=read.csv("birthweight.csv", header=TRUE)
+
+bweight$Black=as.factor(bweight$Black)
+bweight$Married=as.factor(bweight$Married)
+bweight$Boy=as.factor(bweight$Boy)
+bweight$MomSmoke=as.factor(bweight$MomSmoke)
+bweight$Ed=as.factor(bweight$Ed)
+
+str(bweight)
+```
+
+```{r}
+boxplot(bweight$Weight)
+points(mean(bweight$Weight, na.rm=TRUE), col="red")
+```
+
+From the boxplot above, looks the Weight data of infant normally distributed, the mean and the middle are almost same. There are very few outliers, more under minimum outliers than greater maximum outliers, they won't affect the normality of the data distribution.
+
+```{r}
+qqnorm(bweight$Weight);qqline(bweight$Weight, col=2)
+```
+```{r}
+shapiro.test(bweight$Weight)
+```
+#Q1(a)
+From the QQ-plot, the observations are almost follow a straight line, that means the data normal distributed.
+From Shapiro-Wilk normality test, the p-value is 0.1153, which is greater than significance level 0.05, so we do not have enough evidence to reject the null hypothesis, thus our conclusion is: Infant birth weight fallows normal distribution.
+ 
+
+```{r}
+boxplot(Weight ~ MomSmoke, data=bweight, main="Weight by MomSmoke",
+        xlab="MomSmoke", ylab="Weight")
+```
+#Q(b)
+From the Weight by MomSmoke boxplot above, we can see the mean of infant birth weight from smoking mom is lower than non-smoking mom.
+```{r}
+shapiro.test(bweight$Weight[bweight$MomSmoke == 0])
+shapiro.test(bweight$Weight[bweight$MomSmoke == 1])
+```
+#Q(c)
+From Shaprion-Wilk normality test, the p-value of infant birth weight from both non-smoking and somking mom, are greater than the significance level 0.05, so we conclude that the Weight by MomSmoke data is normally distributed.
+
+#Exercise 2
+```{r}
+var.test(Weight ~ MomSmoke, bweight, alternative = "two.sided")
+```
+
+```{r}
+t.test(Weight ~ MomSmoke, bweight, alternative = "two.sided", var.equal=TRUE)
+```
+
+From Exercise 1 we got infant birth weight by non-smoking and smoking mom are following normal distribution, so we perform two-sample t-test. We first need do equal variance check, the hypothesis of equal variance test is: 
+H0: non-smoking and smoking mom have same variance
+H1: non-smoking and smoking mom have different variance
+From the variance test, we get p-value = 0.8009, which is greater than significance level 0.05, so we do not reject H0, we say non-smoking and smoking mom have same variance. So we choose Pooled t-test, and the hypothesis is:
+H0: mean of non-smoking = mean of smocking mom
+H1: mean of non-smoking != mean of smoking mom
+The p-value of pooled t-test is 0.002334, which is smaller than significance level 0.05, so we reject the null, we say there is a significance difference in infant birth weight between infants from smoking mom and nonsmoking mom.
+
+#Exercise 3 
+```{r}
+aov.bweight=aov(Weight ~ MomSmoke, data = bweight)
+summary(aov.bweight)
+```
+```{r}
+LeveneTest(aov.bweight)
+```
+#Q(a)
+The p-value=0.4114 from Levene's Test for Homogeneity of Variance is greater than significance level 0.05, so,we say non-smoking and smoking mom have same variance.
+#Q(b)
+The p-value from ANOVA for the effect of MomSmoke is less than significance level 0.05. Thus, we can conclude that MomSmoke has significance effect on infant birth weight. This conclusion is same as Exercise 2.
+
+#Exercise 4
+```{r}
+aov.bweight1= aov(Weight ~ Black + Married + Boy + MomSmoke + Ed, data = bweight)
+Anova(aov.bweight1, type=3)
+```
+
+```{r}
+aov.bweight2= aov(Weight ~ Black + Married + Boy + MomSmoke, data = bweight)
+Anova(aov.bweight2, type=3)
+```
+
+```{r}
+aov.bweight3= aov(Weight ~ Black + Boy + MomSmoke, data = bweight)
+Anova(aov.bweight3, type=3)
+```
+
+```{r}
+aov.bweight4 = aov(Weight ~ Black + MomSmoke, data = bweight)
+Anova(aov.bweight4, type=3)
+```
+#Q(a)
+As above steps show, to perform backward selection, 
+First, start with a ANOVA model that contains all variables, find out the least significant p-value 0.8625846 that greater than significance level 0.05 and remove its corresponding variable Ed. 
+Second, perform a ANOVA model without Ed, and get the least significant p-value 0.6157671, which is greater than significance level 0.05, so, remove Married variable. 
+Third, perform a ANOVA model without Married, and get the least significant p-value 0.3888071, then remove Boy variable since its p-value greater than significance level 0.05.
+Finally, perform a ANOVA model only has Black and MomSmoke variable, and the result has no p-value greater than significance level 0.05, no variable can be removed. So we keep Black and MomSmoke variable in our ANOVA model.
+
+#Q(b)
+```{r}
+LeveneTest(Weight ~ Black * MomSmoke, data = bweight)
+```
+The p-value of both Black and MomSmoke in above ANOVA model are smaller than significance level 0.05, so, we say they have significant effect on infant birth weight.
+The p-value of Levene's Test for Homogeneity of Variance is 0.8025, which is greater than significance level 0.05, so,we say Black and MomSmoke have same variance.
+
+#Q(c)
+```{r}
+aov.bweight5 = aov(Weight ~ Black * MomSmoke, data = bweight)
+TukeyHSD(aov.bweight5)
+```
+From above Tukey test, the differences of least squares means for main effects tell us that the mean of White mom infant weight greater than Black mom, the mean of non-smoking mom infant weight greater than smoking mom.
+For the interaction term, the p-value that smaller than significance level 0.05 are: 0.0015363,0.0141469 and 0.0141469. we can see that the mean of White no-smoking mom infant weight is significantly greater than others combinations. Specifically, the combinations follow below order:
+White no-smoking  > Black non-smoking
+White no-smoking  > White smoking
+White no-smoking  > Black smoking
