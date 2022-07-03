@@ -1,6 +1,6 @@
 ---
 title: "Scales"
-author: "Ashwin Malshe"
+author: "Lily He"
 date: "10/4/2021"
 output: html_document
 ---
