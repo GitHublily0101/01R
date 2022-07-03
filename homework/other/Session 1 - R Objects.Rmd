@@ -1,6 +1,6 @@
 ---
 title: "Session 1: R Objects"
-author: "Ashwin Malshe"
+author: 
 date: "06/01/2021"
 output: html_document
 ---
