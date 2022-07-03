@@ -1,6 +1,6 @@
 ---
 title: "Basic Plots Part 1"
-author: "Ashwin Malshé"
+author: "Lily He"
 date: "21 September 2021"
 output: html_document
 ---
