@@ -1,0 +1,64 @@
+---
+title: "Pipe Operator"
+author: "Ashwin Malshe"
+date: "06/01/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+```
+
+The `%>%` operator takes the object on its left and uses as the first argument to the function on its right.
+
+```{r}
+
+2 %>% sum(5)
+```
+
+is equivalent to
+
+```{r}
+sum(2, 5)
+
+```
+
+Order matters for the pipe!
+
+```{r}
+"Ashwin" %>% paste("My name is")
+```
+
+What we really wanted
+
+```{r}
+paste("My name is", "Ashwin")
+```
+
+Pipe  makes the code more readable when there are several nested functions.
+
+```{r}
+summary(lm(hwy ~ cty, data = mpg))
+```
+
+```{r}
+lm(hwy ~ cty, data = mpg) %>% 
+  summary()
+```
+
+This will throw an error! Why?
+
+```{r}
+mpg %>% 
+  lm(hwy ~ cty) %>% 
+  summary()
+```
+
+```{r}
+mpg %>% 
+  lm(hwy ~ cty, data = .) %>% 
+  summary()
+```
+
+
+Note, as of today, the latest version of R has introduced its own pipe |> operator! However, it doesn't replicate all the functions of `%>%` so I don't use it.
