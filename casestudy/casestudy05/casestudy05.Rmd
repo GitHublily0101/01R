@@ -1,0 +1,451 @@
+---
+title: "individual case stuty"
+author: "Lily He"
+date: "4/28/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+install.packages("VIM")
+```
+
+
+```{r}
+library(data.table)   # Read Data
+library(plotly)       # Data Visualization
+library(mice)         # Data Imputation by Regression
+library(missForest)   # Data Imputation by Random Forest
+library(ROSE)         # Synthetic Data Generation
+library(glmnet)       # Lasso Regression
+library(plotmo)       # Lasso Regression Visualization
+library(xgboost)      # Gradient Boosting Machine
+library(caret)        # Cross Validation
+library(VIM)          # Visualization and Imputation of Missing Values
+library(gbm)          # Gradient boosting machine
+library(car)          # Multicollinearity
+library(ROCR)         # Evaluating and visualizing the performance of scoring classifiers
+library(pROC)         # Display and Analyze ROC Curves
+library(e1071)        # SVM
+```
+
+Read Data
+     After reading feature and label dataset, we directly binded these datasets together and renamed the coloumn names of each variable. Also, we changed the data type of response into factor for the analysis afterward.
+     
+```{r}
+feature <- fread("/Users/lilyhe/Documents/01 UTSA Spring 2022/02_DA6813/casestudy/Individual case stuey/secom.data", data.table = F)
+label <- fread("/Users/lilyhe/Documents/01 UTSA Spring 2022/02_DA6813/casestudy/Individual case stuey/secom_labels.data", data.table = F)
+data <- cbind(label,feature)
+colnames(data) <- c("Class", "Time", paste0(rep("Feature", ncol(feature)), seq(1,ncol(feature))))
+data$Class <- factor(data$Class, labels = c("pass", "fail"))
+data$Time <-  as.POSIXct(data$Time, format = "%d/%m/%Y %H:%M:%S", tz = "GMT")
+```
+
+Data Summary
+     The dataset contains 1567 observations taken from a wafer fabrication production line. Each observation is a vector of 590 sensor measurements plus a label of pass/fail test. Also, there are only 104 fail cases which is a 1:14 proportion. Observing some of the features, we can see that there are missing values and equal value that needed to be preprocessing which comes to the next step.
+
+```{r}
+str(data, list.len=100)
+```
+
+```{r}
+summary(data[,1:40])
+```
+Data Preprocessing
+     After observe all variables, there are two kinds of situation that needs to be correct,which is “Redundant” , “No Value variables”.
+Variable Redundant
+     Drop the equal value features and variable “Time” which we do not concern in this study.
+No Value variables
+     Variables that contain only 0's
+     
+
+```{r}
+# Time variable #
+time_var <- which(colnames(data) == "Time")
+
+# No Value variables #
+equal_val <- apply(data, 2, function(x) max(na.omit(x)) == min(na.omit(x)))
+zero_var <- which(equal_val == T)
+```
+
+```{r}
+# No Value variables #
+equal_val2 <- apply(data, 2, function(x) (median(na.omit(x)) == min(na.omit(x))|median(na.omit(x)) ==0) )
+zero_var2 <- which(equal_val2 == T)
+
+```
+
+
+
+```{r}
+summary(data_dp[,1:40])
+```
+
+```{r}
+data1 = data
+data1$Class = ifelse(data1$Class=="pass",0,1)
+```
+
+
+
+
+```{r}
+# Missing Value #
+row_NA <- apply(data1, 1, function(x) sum(is.na(x))/ncol(data1))
+col_NA <- apply(data1, 2, function(x) sum(is.na(x))/nrow(data1))
+plot_ly(x = seq(1,nrow(data1)), y = row_NA, type = "scatter", mode = "markers") %>%
+  layout(title = "Observations Missing Values Percentage",
+         xaxis = list(title = "Observations"),
+         yaxis = list(title = "Percentage(%)"))
+```
+
+```{r}
+plot_ly(x = seq(1,ncol(data1)), y = col_NA, type = "scatter", mode = "markers") %>%
+  layout(title = "Variables Missing Values Percentage",
+         xaxis = list(title = "Variables"),
+         yaxis = list(title = "Percentage(%)"))
+```
+
+```{r}
+nagrt40 <- which(col_NA >= 0.3)
+data_dp <- data1[,-unique(c(time_var, zero_var,zero_var2, nagrt40))]
+```
+
+```{r}
+data_knn <- kNN(data_dp)
+```
+
+```{r}
+data_knn = data_knn[,1:430]
+```
+
+```{r}
+data_knn$Class = as.factor(data_knn$Class)
+```
+
+
+```{r}
+
+write.csv(data_knn,"/Users/lilyhe/Documents/01 UTSA Spring 2022/02_DA6813/casestudy/Individual case stuey/data_knn.csv", row.names = FALSE)
+
+```
+
+
+
+```{r}
+set.seed(2)
+index <- sample(1:nrow(data_knn), nrow(data_knn)/10)
+train <- data_knn[-index,]
+test <- data_knn[index,]
+```
+
+
+
+```{r}
+table(train$Class)
+```
+
+
+```{r}
+train_rose <- ROSE(Class ~ ., data = train, seed = 1)$data
+table(train_rose$Class)
+```
+
+
+
+     
+```{r}
+set.seed(1)
+fit_glmnet <- glmnet(as.matrix(train_rose[,-1]), train_rose[,1], family="binomial", alpha=1)
+plot_glmnet(fit_glmnet, "lambda", label=10)
+```
+
+```{r}
+set.seed(1)
+fit_glmnet_cv <- cv.glmnet(as.matrix(train_rose[,-1]), as.matrix(as.numeric(train_rose[,1])-1), type.measure="class", family="binomial", alpha=1)
+plot(fit_glmnet_cv)
+```
+
+```{r}
+coef <- coef(fit_glmnet_cv, s = "lambda.min")
+coef_df <- as.data.frame(as.matrix(coef))
+selected <- rownames(coef_df)[which(coef_df[,1] != 0)][-1]
+```
+
+```{r}
+selected
+```
+
+
+```{r}
+set.seed(2)
+
+x.train <- model.matrix(Class~., data=train_rose)[, -1]
+y.train <- as.matrix(as.numeric(train_rose$Class))
+
+ridge.fit <- glmnet(x.train,y.train,alpha=0)
+cv.ridge.fit <- cv.glmnet(x.train,y.train,alpha=0)
+plot(cv.ridge.fit)
+
+```
+
+```{r}
+bestlam <- cv.ridge.fit$lambda.min
+bestlam
+```
+
+
+```{r}
+lasso.fit <- glmnet(x.train,y.train,alpha=1)
+cv.lasso.fit<- cv.glmnet(x.train,y.train,alpha=1)
+bestlam.lasso <- cv.lasso.fit$lambda.min
+bestlam.lasso
+```
+
+
+```{r}
+lasso.c <- predict(lasso.fit,type="coefficients", s=bestlam.lasso)[1:430,]
+length(lasso.c[lasso.c != 0])
+```
+
+
+     
+```{r}
+modeldata <-train_rose[,c("Class",selected)]
+fit_glm <- glm(Class ~ ., data=modeldata, family = "binomial")
+table_glm <- round(summary(fit_glm)$coefficient, 4)
+table_glm[order(table_glm[,4])[1:85],]
+
+```
+
+
+```{r}
+
+subset(table_glm, table_glm[,4]<0.05)
+```
+
+```{r}
+table_glm[order(table_glm[,4])[44:85],]
+```
+
+
+```{r}
+summary(fit_glm)
+```
+
+
+```{r}
+pred_glm <- factor(ifelse(predict(fit_glm, test, type = "response") > 0.5, "fail", "pass"), levels = c("pass", "fail"))
+pred_accuracy = table(pred_glm,test$Class)
+pred_accuracy
+```
+
+```{r}
+pred_glm <- ifelse(predict(fit_glm, test, type = "response") > 0.8, 1, 0)
+pred_accuracy = table(as.factor(pred_glm),test$Class)
+pred_accuracy
+```
+
+
+```{r}
+sum(diag(pred_accuracy))/sum(pred_accuracy)
+```
+
+
+```{r}
+#Testing for multicollinearity: As a rule of thumb, a VIF value that exceeds 5 or 10 indicates a problematic amount of collinearity. All variables are < 4
+
+vif(fit_glm)
+```
+
+```{r}
+
+test$PredProd = predict.glm(fit_glm, newdata = test, type = "response")
+```
+
+```{r}
+test$PredSur = ifelse(test$PredProd >=0.8, 1, 0)
+```
+
+```{r}
+caret::confusionMatrix(as.factor(test$PredSur), as.factor(test$Class))
+```
+
+
+```{r}
+pred <- prediction(predict(fit_glm, test, type = "response"),test$Class) #Predicted Probability and True Classification
+auc <- round(as.numeric(performance(pred, measure = 'auc')@y.values),3)
+false.rates <-performance(pred, "fpr","fnr")
+accuracy <-performance(pred, "acc","err")
+perf <- performance(pred, "tpr","fpr")
+plot(perf,colorize = T, main = "ROC Curve for glm")
+text(0.5,0.5, paste("AUC:", auc))
+```
+
+
+```{r}
+#SVM
+form1 = Class ~ .
+tuned = tune.svm(form1, data = modeldata, gamma = seq(0.1, .1, by = 0.1), cost = seq(.1, 1, by = .1))
+```
+
+```{r}
+mysvm = svm(formula = form1, data = modeldata, gamma = tuned$best.parameters$gamma, cost = tuned$best.parameters$cost)
+summary(mysvm)
+```
+```{r}
+svmpredict = predict(mysvm, test, type = "response")
+SVM_pred_accuracy=table(pred = svmpredict, true= test$Class)
+SVM_pred_accuracy
+```
+```{r}
+sum(diag(SVM_pred_accuracy))/sum(SVM_pred_accuracy)
+```
+
+
+```{r}
+roc_svm_test <- roc(response = test$Class, data=modeldata, predictor =as.numeric(svmpredict))
+plot(roc_svm_test)
+
+{plot(roc_svm_test, add = TRUE,col = "red", print.auc=TRUE, print.auc.x = 0.4, print.auc.y = 0.3)}
+legend(0.3, 0.2, legend = c("test-svm"), lty = c(1), col = c("blue"))
+```
+
+
+
+```{r}
+sum(diag(SVM_pred_accuracy))/sum(SVM_pred_accuracy)
+```
+
+Random forest
+Build forest on train
+
+```{r}
+rf1 <- randomForest(Class ~ ., data = train, mtry = 15, ntree = 500,
+                            importance = TRUE,proximity = TRUE)
+rf1
+```
+
+```{r}
+yhat.rf1 <- predict(rf1, newdata = test)
+table(yhat.rf1, test$Class)
+```
+
+
+```{r}
+sum(diag(table(yhat.rf1, test$Class)))/sum(table(yhat.rf1, test$Class))
+```
+
+```{r}
+importance(rf1)
+```
+
+```{r}
+# Be sure to look at ?importance 
+# Note: 1 = mean decrease in accuracy, 2 = mean decrease in node impurity (RSS) 
+varImpPlot(rf1)
+```
+
+```{r}
+pred1=predict(rf1,test,type = "prob")
+pred = prediction(pred1[,2], test$Class)
+auc <- round(as.numeric(performance(pred, measure = 'auc')@y.values),3)
+
+false.rates <-performance(pred, "fpr","fnr")
+accuracy <-performance(pred, "acc","err")
+perf <- performance(pred, "tpr","fpr")
+plot(perf,colorize = T, main="ROC Curve for Random Forest")
+text(0.5,0.5, paste("AUC:", auc))
+abline(a=0,b=1,lwd=2,lty=2,col="gray")
+```
+```{r}
+mtry <- tuneRF(train[-1],train$Class, ntreeTry=500,
+               stepFactor=1.5,improve=0.01, trace=TRUE, plot=TRUE)
+best.m <- mtry[mtry[, 2] == min(mtry[, 2]), 1]
+print(mtry)
+print(best.m)
+```
+```{r}
+set.seed(71)
+rf <-randomForest(Class~.,data=train, mtry=best.m, importance=TRUE,ntree=500)
+print(rf)
+```
+
+```{r}
+pred2=predict(rf,test,type = "prob")
+pred = prediction(pred2[,2], test$Class)
+auc <- round(as.numeric(performance(pred, measure = 'auc')@y.values),3)
+false.rates <-performance(pred, "fpr","fnr")
+accuracy <-performance(pred, "acc","err")
+perf <- performance(pred, "tpr","fpr")
+plot(perf,colorize = T, main="ROC Curve for Random Forest")
+text(0.5,0.5, paste("AUC:", auc))
+abline(a=0,b=1,lwd=2,lty=2,col="gray")
+```
+
+```{r}
+# make dataframe from importance() output
+
+
+  feat_imp_df <- importance(rf)%>% 
+    data.frame() %>% 
+    mutate(feature = row.names(.))  
+options(repr.plot.width =9, repr.plot.height =9)
+  # plot dataframe
+
+  ggplot(feat_imp_df, aes(x = reorder(feature, MeanDecreaseGini), 
+                         y = MeanDecreaseGini),fig(1,1)) +
+    geom_bar(stat='identity',fill = "light green", color = "black", width = 5) +
+    coord_flip() +
+    theme_classic() +
+    labs(
+      x     = "Feature",
+      y     = "Importance"
+    )+theme(text = element_text(size = 15),element_line(size =1),plot.title = element_text(hjust = 0.5))+
+    ggtitle("Feature Importance") 
+```
+
+```{r}
+feat_imp_df2 <- feat_imp_df%>% arrange(desc(MeanDecreaseGini))
+feat_imp_df2 <- head(feat_imp_df2,10)
+ggplot(feat_imp_df2, aes(x = reorder(feature, MeanDecreaseGini), 
+                         y = MeanDecreaseGini),fig(1,1)) +
+    geom_bar(stat='identity',fill = "light green", color = "black", width = 1) +
+    coord_flip() +
+    theme_classic() +
+    labs(
+      x     = "Feature",
+      y     = "Importance"
+      
+    )+theme(text = element_text(size = 15),element_line(size =1),plot.title = element_text(hjust = 0.5))+
+   ggtitle( "Feature Importance chart")
+```
+
+```{r}
+feat_imp10 <- feat_imp_df%>% arrange(desc(MeanDecreaseGini))
+feat_imp10 <- head(feat_imp_df2,10)
+train_imp10<-train[,c("Class",feat_imp10[,"feature"])]
+```
+
+
+```{r}
+rf2 <- randomForest(Class ~ ., data = train_imp10, mtry = best.m, ntree = 500,
+                            importance = TRUE,proximity = TRUE)
+rf2
+```
+
+
+```{r}
+pred2=predict(rf2,test,type = "prob")
+pred = prediction(pred2[,2], test$Class)
+auc <- round(as.numeric(performance(pred, measure = 'auc')@y.values),3)
+false.rates <-performance(pred, "fpr","fnr")
+accuracy <-performance(pred, "acc","err")
+perf <- performance(pred, "tpr","fpr")
+plot(perf,colorize = T, main="ROC Curve for Random Forest")
+text(0.5,0.5, paste("AUC:", auc))
+abline(a=0,b=1,lwd=2,lty=2,col="gray")
+```
