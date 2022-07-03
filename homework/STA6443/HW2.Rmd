@@ -1,6 +1,6 @@
 ---
 title: "HW_PDF_LilyHe"
-author: "Liping He"
+author: "Lily He"
 date: "10/1/2021"
 output: pdf_document
 ---
