@@ -1,6 +1,6 @@
 ---
 title: "highcharter-JS to R"
-author: "Ashwin Malshe"
+author: "Lily He"
 date: "10/18/2021"
 output: html_document
 ---
