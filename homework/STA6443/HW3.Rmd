@@ -1,6 +1,6 @@
 ---
 title: "HW3"
-author: "Liping He"
+author: "Lily He"
 date: "10/20/2021"
 output: word_document
 ---
